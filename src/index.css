@@ -1,0 +1,157 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cream:       #FAF7F4;
+  --color-cream-dark:  #F0EBE3;
+  --color-brown:       #2C1810;
+  --color-brown-light: #5C3D2E;
+  --color-brown-mid:   #8B6355;
+  --color-gold:        #C9A84C;
+  --color-gold-light:  #E8D5A3;
+  --color-muted:       #8B7355;
+  --color-border:      #E8DDD4;
+  --font-serif: 'Cormorant Garamond', Georgia, serif;
+  --font-sans:  'Jost', system-ui, sans-serif;
+}
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Jost', system-ui, sans-serif;
+    font-weight: 300;
+    background-color: #FAF7F4;
+    color: #2C1810;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: 0.02em;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: #F0EBE3; }
+  ::-webkit-scrollbar-thumb { background: #C9A84C; border-radius: 2px; }
+}
+
+@layer utilities {
+  .font-serif  { font-family: 'Cormorant Garamond', Georgia, serif; }
+  .font-sans   { font-family: 'Jost', system-ui, sans-serif; }
+
+  .tracking-luxury { letter-spacing: 0.25em; }
+  .tracking-wide-xl { letter-spacing: 0.18em; }
+
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+/* Marquee animation */
+@keyframes marquee {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee 28s linear infinite;
+  will-change: transform;
+}
+.animate-marquee:hover { animation-play-state: paused; }
+
+/* Hero crossfade */
+.hero-slide {
+  transition: opacity 1.2s ease-in-out;
+}
+
+/* Hero Ken Burns — slow zoom on the active slide only */
+@keyframes kenburns {
+  0%   { transform: scale(1); }
+  100% { transform: scale(1.08); }
+}
+.hero-kenburns {
+  animation: kenburns 7s ease-out forwards;
+}
+
+/* Scroll reveal — fades/lifts content in as it enters the viewport */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+.reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Route transition — subtle fade-in on each page mount */
+@keyframes route-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.route-fade {
+  animation: route-fade-in 0.35s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-kenburns, .reveal, .route-fade { animation: none !important; transition: none !important; }
+  .reveal { opacity: 1; transform: none; }
+}
+
+/* Nav underline hover */
+.nav-link {
+  position: relative;
+}
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background: #2C1810;
+  transition: width 0.3s ease;
+}
+.nav-link:hover::after { width: 100%; }
+
+/* Product card image swap */
+.product-img-primary  { transition: opacity 0.5s ease; }
+.product-img-secondary { transition: opacity 0.5s ease; opacity: 0; }
+.product-card-wrap:hover .product-img-primary  { opacity: 0; }
+.product-card-wrap:hover .product-img-secondary { opacity: 1; }
+
+/* Shared brand buttons/inputs — used across cart, checkout, PDP, account so
+   these surfaces match the brown/cream/gold system instead of a generic
+   SaaS violet/rounded-xl look. */
+@layer components {
+  .btn-brand-primary {
+    @apply bg-brown text-cream text-[11px] tracking-[0.25em] font-sans uppercase py-3 px-6 transition-colors hover:bg-brown-light disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-brand-secondary {
+    @apply border border-brown text-brown text-[11px] tracking-[0.25em] font-sans uppercase py-3 px-6 transition-colors hover:bg-brown hover:text-cream disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-brand-ghost {
+    @apply border border-border text-brown-mid text-[11px] tracking-[0.25em] font-sans uppercase py-3 px-6 transition-colors hover:border-brown hover:text-brown disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .input-brand {
+    @apply w-full border border-border bg-cream px-3 py-2.5 text-sm font-sans font-light text-brown outline-none transition-colors focus:border-brown placeholder:text-brown-mid/50;
+  }
+  .label-brand {
+    @apply text-[10px] tracking-[0.25em] font-sans uppercase text-brown-mid mb-1.5 block;
+  }
+  .panel-brand {
+    @apply bg-cream border border-border;
+  }
+}

@@ -1,0 +1,150 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // SQLite for local dev — zero setup. To move to Postgres later, change
+  // provider to "postgresql" and url to your connection string, then
+  // `npx prisma migrate dev` again. See development.md.
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  phone        String?
+  city         String?
+  role         String   @default("customer") // "customer" | "support" | "manager" | "superadmin"
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  orders  Order[]
+  reviews Review[]
+}
+
+// Records staff actions for accountability — who changed what, when.
+// Write-only from the app's perspective; the admin UI only ever reads it.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorName  String
+  actorRole  String
+  action     String   // e.g. "product.create", "order.status_update"
+  entityType String   // "Product" | "Order" | "Banner" | "Review" | "Settings" | "Staff"
+  entityId   String?
+  summary    String
+  createdAt  DateTime @default(now())
+}
+
+model Category {
+  id    String @id
+  name  String
+  icon  String @default("")
+  image String @default("")
+  sub   Json
+}
+
+model Product {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  category     String
+  categoryId   String
+  subcategory  String?
+  material     String?
+  price        Float
+  originalPrice Float?
+  discount     Float    @default(0)
+  rating       Float    @default(0)
+  reviewCount  Int      @default(0)
+  stock        Int      @default(0)
+  badge        String?
+  colors       Json
+  images       Json
+  description  String   @default("")
+  features     Json
+  isFeatured   Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  reviews    Review[]
+  orderItems OrderItem[]
+}
+
+model Banner {
+  id           String  @id @default(cuid())
+  title        String
+  label        String?
+  link         String?
+  desktopImage String
+  mobileImage  String
+  isActive     Boolean @default(true)
+  order        Int     @default(0)
+}
+
+model Order {
+  id              String   @id @default(cuid())
+  userId          String?
+  customerName    String
+  customerEmail   String
+  subtotal        Float
+  shipping        Float    @default(0)
+  giftWrapFee     Float    @default(0)
+  total           Float
+  status          String   @default("pending") // pending|processing|shipped|delivered|cancelled
+  paymentStatus   String   @default("pending")  // pending|paid|refunded
+  paymentId       String?
+  razorpayOrderId String?
+  address         Json
+  giftWrap        Boolean  @default(false)
+  giftNote        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user  User?       @relation(fields: [userId], references: [id])
+  items OrderItem[]
+}
+
+model OrderItem {
+  id              String @id @default(cuid())
+  orderId         String
+  productId       String?
+  productSnapshot Json
+  quantity        Int
+  variant         Json
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id])
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  productId  String
+  userId     String?
+  userName   String
+  rating     Int
+  title      String?
+  body       String?
+  date       DateTime @default(now())
+  isApproved Boolean  @default(false)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id])
+}
+
+model Settings {
+  id                     Int    @id @default(1)
+  storeName              String @default("FoldX")
+  tagline                String @default("Handcrafted Leather Goods")
+  announcementBar        String @default("")
+  freeShippingThreshold  Float  @default(999)
+  supportEmail           String @default("")
+  supportPhone           String @default("")
+  address                String @default("")
+  instagramHandle        String @default("")
+  currency               String @default("INR")
+  razorpayKeyId          String @default("")
+}
