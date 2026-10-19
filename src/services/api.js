@@ -10,7 +10,8 @@
  * authStore itself — authStore's login actions call into this file, so
  * importing it back here would create a circular module dependency.
  */
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+// Empty string = same origin (production Docker build, where nginx proxies /api).
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
 
 function getStoredToken() {
   try {

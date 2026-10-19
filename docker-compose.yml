@@ -1,0 +1,26 @@
+name: foldx
+
+services:
+  backend:
+    build: ./backend
+    container_name: foldx-backend
+    env_file: ./backend/.env
+    volumes:
+      - foldx_uploads:/app/uploads   # product images survive rebuilds
+    restart: unless-stopped
+    # no published port — only reachable through the frontend's nginx
+
+  frontend:
+    build:
+      context: .
+      args:
+        VITE_RAZORPAY_KEY_ID: ${VITE_RAZORPAY_KEY_ID:-}
+    container_name: foldx-frontend
+    ports:
+      - "7001:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  foldx_uploads:
