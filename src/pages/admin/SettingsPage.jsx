@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { Save, RotateCcw, Download, Upload } from 'lucide-react'
 import useSettingsStore from '@/store/settingsStore'
 import { exportData, importData, resetDemoData } from '@/services/api'
+import { INDIAN_STATES } from '@/data/indianStates'
 import toast from 'react-hot-toast'
+import { usePermissions } from '@/utils/permissions'
 
 function Section({ title, desc, children }) {
   return (
@@ -32,6 +34,7 @@ export default function SettingsPage() {
   const settings = useSettingsStore()
   const [form, setForm] = useState({ ...settings })
   const [saving, setSaving] = useState(false)
+  const { canEditCatalog, isSuperAdmin } = usePermissions()
 
   const set = (field, value) => setForm((f) => ({ ...f, [field]: value }))
 
@@ -50,8 +53,12 @@ export default function SettingsPage() {
 
   const handleReset = async () => {
     if (!confirm('Reset ALL demo data (products, banners, orders, reviews) to defaults?')) return
-    await resetDemoData()
-    toast.success('Store data reset to defaults')
+    try {
+      await resetDemoData()
+      toast.success('Store data reset to defaults')
+    } catch (err) {
+      toast.error(err.message)
+    }
   }
 
   const handleExport = async () => {
@@ -91,10 +98,18 @@ export default function SettingsPage() {
     <div className="max-w-2xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-400 mt-1">Configure your store settings. Changes save instantly to local storage.</p>
+        <p className="text-sm text-gray-400 mt-1">Configure your store settings. Changes go live on the storefront when you save.</p>
       </div>
 
-      <form onSubmit={handleSave} className="space-y-5">
+      {!canEditCatalog && (
+        <p className="text-sm text-gray-500 bg-white border border-gray-200 rounded-xl px-4 py-3">
+          You can view these settings, but only a Manager or Super Admin can change them.
+        </p>
+      )}
+
+      <form onSubmit={handleSave}>
+        {/* A disabled fieldset makes every field inside read-only in one go */}
+        <fieldset disabled={!canEditCatalog} className="space-y-5 min-w-0">
         {/* Store Info */}
         <Section title="Store Information" desc="These values appear on the customer-facing site.">
           <div className="grid grid-cols-2 gap-4">
@@ -126,6 +141,41 @@ export default function SettingsPage() {
           <Field label="Store Address">
             <input value={form.address} onChange={(e) => set('address', e.target.value)} className={inputCls} />
           </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Legal Business Name" hint="Shown on invoices if it differs from the store name.">
+              <input value={form.legalName ?? ''} onChange={(e) => set('legalName', e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="GSTIN" hint="15-character GST number, printed on invoices.">
+              <input
+                value={form.gstin ?? ''}
+                onChange={(e) => set('gstin', e.target.value.toUpperCase())}
+                maxLength={15}
+                placeholder="22AAAAA0000A1Z5"
+                className={`${inputCls} font-mono`}
+              />
+            </Field>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <Field label="Store State" hint="Same state as customer → CGST + SGST, else IGST.">
+              <select value={form.state ?? ''} onChange={(e) => set('state', e.target.value)} className={inputCls}>
+                <option value="">Not set</option>
+                {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </Field>
+            <Field label="Default HSN Code" hint="Used when a product has none.">
+              <input
+                value={form.defaultHsnCode ?? ''}
+                onChange={(e) => set('defaultHsnCode', e.target.value.replace(/\D/g, '').slice(0, 8))}
+                inputMode="numeric"
+                className={`${inputCls} font-mono`}
+              />
+            </Field>
+            <Field label="Default GST Rate (%)" hint="Used when a product has none.">
+              <select value={form.defaultGstRate ?? 18} onChange={(e) => set('defaultGstRate', Number(e.target.value))} className={inputCls}>
+                {[0, 3, 5, 12, 18, 28, 40].map((r) => <option key={r} value={r}>{r}%</option>)}
+              </select>
+            </Field>
+          </div>
           <Field label="Free Shipping Threshold (₹)" hint="Orders above this amount get free shipping.">
             <input
               type="number"
@@ -135,6 +185,42 @@ export default function SettingsPage() {
               className={inputCls}
             />
           </Field>
+          <div className="grid grid-cols-3 gap-4">
+            <Field label="Shipping Fee (₹)" hint="Charged below the free-shipping threshold.">
+              <input type="number" min="0" value={form.flatShippingFee ?? 99} onChange={(e) => set('flatShippingFee', Number(e.target.value))} className={inputCls} />
+            </Field>
+            <Field label="Gift Wrap Fee (₹)">
+              <input type="number" min="0" value={form.giftWrapFee ?? 149} onChange={(e) => set('giftWrapFee', Number(e.target.value))} className={inputCls} />
+            </Field>
+            <Field label="Shipping Cost Per Order (₹)" hint="What a courier charges you, on average — for Finance → Profit.">
+              <input type="number" min="0" step="1" value={form.shippingCostPerOrder ?? 0} onChange={(e) => set('shippingCostPerOrder', Number(e.target.value))} className={inputCls} />
+            </Field>
+            <Field label="Return Window (days)" hint="After delivery, for return requests.">
+              <input type="number" min="0" step="1" value={form.returnWindowDays ?? 10} onChange={(e) => set('returnWindowDays', Number(e.target.value))} className={inputCls} />
+            </Field>
+          </div>
+        </Section>
+
+        {/* Cash on delivery */}
+        <Section title="Cash on Delivery" desc="Every COD order waits for staff to confirm it with the customer before it's packed.">
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" checked={form.codEnabled ?? true} onChange={(e) => set('codEnabled', e.target.checked)} />
+            Offer cash on delivery at checkout
+          </label>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="COD Fee (₹)" hint="Added to COD orders. 0 for none.">
+              <input type="number" min="0" step="1" value={form.codFee ?? 49} onChange={(e) => set('codFee', Number(e.target.value))} className={inputCls} />
+            </Field>
+            <Field label="Maximum COD Order (₹)" hint="COD is hidden for bigger orders.">
+              <input type="number" min="0" step="1" value={form.codMaxOrder ?? 15000} onChange={(e) => set('codMaxOrder', Number(e.target.value))} className={inputCls} />
+            </Field>
+            <Field label="Refusals Before COD Stops" hint="Parcels a customer can refuse before they must pay online.">
+              <input type="number" min="1" step="1" value={form.codMaxRefusals ?? 2} onChange={(e) => set('codMaxRefusals', Number(e.target.value))} className={inputCls} />
+            </Field>
+            <Field label="Open COD Orders Per Customer" hint="Unconfirmed or undelivered COD orders allowed at once.">
+              <input type="number" min="1" step="1" value={form.codMaxOpen ?? 2} onChange={(e) => set('codMaxOpen', Number(e.target.value))} className={inputCls} />
+            </Field>
+          </div>
         </Section>
 
         {/* Payments */}
@@ -149,13 +235,14 @@ export default function SettingsPage() {
           </Field>
         </Section>
 
-        <button
+        {canEditCatalog && <button
           type="submit"
           disabled={saving}
           className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60"
         >
           <Save size={15} /> {saving ? 'Saving…' : 'Save Settings'}
-        </button>
+        </button>}
+        </fieldset>
       </form>
 
       {/* Data Management */}
@@ -168,17 +255,17 @@ export default function SettingsPage() {
             <Download size={15} /> Export Data (JSON)
           </button>
 
-          <label className="flex items-center gap-2 border border-gray-200 hover:border-violet-400 text-gray-600 hover:text-violet-600 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors cursor-pointer">
+          {canEditCatalog && <label className="flex items-center gap-2 border border-gray-200 hover:border-violet-400 text-gray-600 hover:text-violet-600 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors cursor-pointer">
             <Upload size={15} /> Import Data (JSON)
             <input type="file" accept=".json" className="hidden" onChange={handleImport} />
-          </label>
+          </label>}
 
-          <button
+          {isSuperAdmin && <button
             onClick={handleReset}
             className="flex items-center gap-2 border border-red-200 hover:border-red-400 text-red-500 hover:text-red-600 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
           >
             <RotateCcw size={15} /> Reset to Demo Data
-          </button>
+          </button>}
         </div>
         <p className="text-xs text-gray-400">
           Export saves everything to a JSON file you can re-import later. Reset replaces all current data with the original demo data.

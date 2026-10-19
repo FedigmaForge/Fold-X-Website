@@ -1,30 +1,28 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import useSettingsStore from '@/store/settingsStore'
+import useSiteContentStore from '@/store/siteContentStore'
+import { getPublishedPages } from '@/services/api'
 
-const SHOP_LINKS = [
-  { label: 'Women',       href: '/products?gender=women' },
-  { label: 'Men',         href: '/products?gender=men' },
-  { label: 'Travel',      href: '/products?category=travel' },
-  { label: 'Accessories', href: '/products?category=accessories' },
-  { label: 'Gift Sets',   href: '/products?category=gifts' },
-  { label: 'New Arrivals',href: '/products?badge=new' },
-  { label: 'The Journal', href: '/journal' },
-]
-
-const HELP_LINKS = [
-  'My Orders', 'Returns & Refunds', 'Shipping Policy', 'FAQ', 'Privacy Policy', 'Terms of Service',
-]
-
-const SOCIAL = [
-  { label: 'Instagram', handle: '@foldx.in' },
-  { label: 'Pinterest', handle: '@foldx' },
-  { label: 'Facebook',  handle: 'FoldX' },
+// Fixed help links; published content pages (About, FAQ, policies…) are
+// appended after these. Shop links, social links and the blurb are edited in
+// admin → Storefront → Footer.
+const FIXED_HELP_LINKS = [
+  { label: 'My Orders', href: '/account' },
+  { label: 'Contact Us', href: '/contact' },
 ]
 
 export default function Footer() {
   const [email, setEmail] = useState('')
   const { address, supportPhone, supportEmail } = useSettingsStore()
+  const footer = useSiteContentStore((s) => s.footer)
+  const [pages, setPages] = useState([])
+
+  useEffect(() => {
+    getPublishedPages().then((p) => setPages(p.filter((x) => x.showInFooter))).catch(() => {})
+  }, [])
+
+  const helpLinks = [...FIXED_HELP_LINKS, ...pages.map((p) => ({ label: p.title, href: `/pages/${p.slug}` }))]
 
   const handleSubscribe = (e) => {
     e.preventDefault()
@@ -67,14 +65,19 @@ export default function Footer() {
         <div className="col-span-2 sm:col-span-1">
           <span className="font-serif text-2xl tracking-[0.3em] text-cream font-light">FOLDX</span>
           <p className="mt-4 text-[12px] font-sans font-light leading-relaxed text-brown-mid max-w-xs">
-            Handcrafted leather goods made with full-grain hides and time-honoured techniques. Designed to age beautifully and last a lifetime.
+            {footer.blurb}
           </p>
           <div className="flex flex-col gap-2 mt-6">
-            {SOCIAL.map((s) => (
-              <a key={s.label} href="#" className="text-[11px] tracking-wide font-sans text-brown-mid hover:text-gold transition-colors">
-                {s.label} <span className="text-cream/40">·</span> {s.handle}
-              </a>
-            ))}
+            {footer.social.map((s) => {
+              const content = <>{s.label}{s.handle && <> <span className="text-cream/40">·</span> {s.handle}</>}</>
+              return s.href ? (
+                <a key={s.label} href={s.href} target="_blank" rel="noopener noreferrer" className="text-[11px] tracking-wide font-sans text-brown-mid hover:text-gold transition-colors">
+                  {content}
+                </a>
+              ) : (
+                <span key={s.label} className="text-[11px] tracking-wide font-sans text-brown-mid">{content}</span>
+              )
+            })}
           </div>
         </div>
 
@@ -82,7 +85,7 @@ export default function Footer() {
         <div>
           <p className="text-[10px] tracking-luxury font-sans uppercase text-brown-mid mb-5">Shop</p>
           <ul className="space-y-3">
-            {SHOP_LINKS.map((item) => (
+            {footer.shopLinks.map((item) => (
               <li key={item.label}>
                 <Link
                   to={item.href}
@@ -99,14 +102,14 @@ export default function Footer() {
         <div>
           <p className="text-[10px] tracking-luxury font-sans uppercase text-brown-mid mb-5">Help</p>
           <ul className="space-y-3">
-            {HELP_LINKS.map((item) => (
-              <li key={item}>
-                <a
-                  href="#"
+            {helpLinks.map((item) => (
+              <li key={item.href}>
+                <Link
+                  to={item.href}
                   className="text-[12px] font-sans font-light text-cream/70 hover:text-cream transition-colors tracking-wide"
                 >
-                  {item}
-                </a>
+                  {item.label}
+                </Link>
               </li>
             ))}
           </ul>

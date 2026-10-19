@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Package, User, MapPin, LogIn } from 'lucide-react'
+import { Package, User, MapPin, LogIn, Truck, Copy, RotateCcw } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/Badge'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate } from '@/utils/formatDate'
 import { getMyOrders } from '@/services/api'
 import useAuthStore from '@/store/authStore'
 import OrderTimeline from '@/components/customer/OrderTimeline'
+import ReturnRequestModal from '@/components/customer/ReturnRequestModal'
 import toast from 'react-hot-toast'
 
 // Shown instead of the account dashboard when the customer isn't signed in —
@@ -85,11 +86,20 @@ function AuthGate() {
   )
 }
 
+const RETURN_STATUS_TEXT = {
+  requested: 'requested — we\'ll review it shortly',
+  approved: 'approved — check your email for how to send it back',
+  received: 'received — your refund is being processed',
+  closed: 'completed',
+  rejected: 'not approved — see our email for details',
+}
+
 export default function AccountPage() {
   const { isLoggedIn, user } = useAuthStore()
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('orders')
+  const [returning, setReturning] = useState(null) // order being returned
 
   useEffect(() => {
     if (!isLoggedIn) return
@@ -100,6 +110,11 @@ export default function AccountPage() {
   }, [isLoggedIn])
 
   if (!isLoggedIn) return <AuthGate />
+
+  const handleReturned = (created) => {
+    setOrders((list) => list.map((o) => (o.id === returning.id ? { ...o, canReturn: false, returns: [created, ...(o.returns ?? [])] } : o)))
+    setReturning(null)
+  }
 
   return (
     <div className="max-w-screen-md mx-auto px-6 py-10 space-y-8">
@@ -160,9 +175,52 @@ export default function AccountPage() {
                 <div className="mb-3 max-w-[220px]">
                   <OrderTimeline status={order.status} compact />
                 </div>
-                <div className="flex justify-between text-sm font-sans">
+                {(order.courier || order.trackingNumber) && order.status !== 'cancelled' && (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-3 px-3 py-2 bg-cream-dark/60 border border-border text-xs font-sans text-brown">
+                    <Truck size={14} strokeWidth={1.5} className="text-brown-mid shrink-0" />
+                    <span>{order.courier ? `Shipped via ${order.courier}` : 'Tracking number'}</span>
+                    {order.trackingNumber && (
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard?.writeText(order.trackingNumber).then(() => toast.success('Tracking number copied'))}
+                        className="inline-flex items-center gap-1 tracking-wider text-brown hover:text-brown-mid"
+                        title="Copy tracking number"
+                      >
+                        · {order.trackingNumber} <Copy size={11} />
+                      </button>
+                    )}
+                  </div>
+                )}
+                {order.returns?.[0] && (
+                  <p className="flex items-center gap-1.5 mb-3 text-xs font-sans text-brown">
+                    <RotateCcw size={12} strokeWidth={1.5} className="text-brown-mid" />
+                    Return {RETURN_STATUS_TEXT[order.returns[0].status] ?? order.returns[0].status}
+                    <span className="text-brown-mid">· {formatDate(order.returns[0].createdAt)}</span>
+                  </p>
+                )}
+                {order.refundedAmount > 0 && (
+                  <p className="flex items-center gap-1.5 mb-3 text-xs font-sans text-brown-mid">
+                    <RotateCcw size={12} strokeWidth={1.5} />
+                    {formatCurrency(order.refundedAmount)} refunded to your original payment method
+                  </p>
+                )}
+                <div className="flex justify-between items-center text-sm font-sans">
                   <span className="text-brown-mid">{order.items.reduce((s, i) => s + i.quantity, 0)} items</span>
-                  <span className="text-brown">{formatCurrency(order.total)}</span>
+                  <span className="flex items-center gap-4">
+                    {order.canReturn && (
+                      <button onClick={() => setReturning(order)} className="text-[10px] tracking-luxury uppercase text-brown border-b border-brown pb-0.5 hover:text-brown-mid hover:border-brown-mid">
+                        Request a return
+                      </button>
+                    )}
+                    <span className="text-brown text-right">
+                      {formatCurrency(order.total)}
+                      {order.paymentMethod === 'cod' && (
+                        <span className="block text-[10px] tracking-wide uppercase text-brown-mid">
+                          {order.paymentStatus === 'pending' && order.status !== 'cancelled' ? 'Cash on delivery · pay on arrival' : 'Cash on delivery'}
+                        </span>
+                      )}
+                    </span>
+                  </span>
                 </div>
               </div>
             ))
@@ -194,6 +252,7 @@ export default function AccountPage() {
           </button>
         </div>
       )}
+      {returning && <ReturnRequestModal order={returning} onClose={() => setReturning(null)} onRequested={handleReturned} />}
     </div>
   )
 }

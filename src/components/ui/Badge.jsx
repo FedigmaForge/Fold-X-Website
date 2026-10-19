@@ -10,7 +10,7 @@ const variants = {
 
 export default function Badge({ children, variant = 'gray', className = '' }) {
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${variants[variant]} ${className}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-sans text-xs font-medium ${variants[variant]} ${className}`}>
       {children}
     </span>
   )
@@ -34,6 +34,7 @@ export function StatusBadge({ status }) {
     cancelled: { label: 'Cancelled', variant: 'red' },
     paid: { label: 'Paid', variant: 'green' },
     refunded: { label: 'Refunded', variant: 'orange' },
+    partially_refunded: { label: 'Part refunded', variant: 'orange' },
     active: { label: 'Active', variant: 'green' },
     inactive: { label: 'Inactive', variant: 'gray' },
   }

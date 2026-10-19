@@ -47,8 +47,19 @@ export default function OrderConfirmationPage() {
           </div>
           {order?.total && (
             <div className="flex justify-between text-sm font-sans">
-              <span className="text-brown-mid">Amount Paid</span>
+              <span className="text-brown-mid">{order.paymentMethod === 'cod' ? 'To pay on delivery' : 'Amount Paid'}</span>
               <span className="text-brown">{formatCurrency(order.total)}</span>
+            </div>
+          )}
+          {order?.paymentMethod === 'cod' && (
+            <p className="text-xs font-sans text-brown-mid border-l-2 border-gold pl-3">
+              Cash on delivery: we'll call you shortly to confirm your order before it ships. Please keep the exact amount ready when it arrives — you can pay by cash or UPI.
+            </p>
+          )}
+          {order?.discount > 0 && (
+            <div className="flex justify-between text-sm font-sans">
+              <span className="text-brown-mid">You saved</span>
+              <span className="text-brown">{formatCurrency(order.discount)}</span>
             </div>
           )}
           {address && (

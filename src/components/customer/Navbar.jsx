@@ -5,85 +5,7 @@ import useCartStore from '@/store/cartStore'
 import useAuthStore from '@/store/authStore'
 import useSettingsStore from '@/store/settingsStore'
 import useWishlistStore from '@/store/wishlistStore'
-
-const NAV_ITEMS = [
-  {
-    label: 'Women',
-    href: '/products?gender=women',
-    sub: [
-      { label: 'Tote Bags',     href: '/products?gender=women&type=tote-bags' },
-      { label: 'Sling Bags',    href: '/products?gender=women&type=sling-bags' },
-      { label: 'Clutches',      href: '/products?gender=women&type=clutches' },
-      { label: 'Shoulder Bags', href: '/products?gender=women&type=shoulder-bags' },
-      { label: 'Wallets',       href: '/products?gender=women&type=wallets' },
-    ],
-    featured: {
-      image: 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&q=85',
-      label: 'New Arrivals',
-      href: '/products?gender=women&badge=new',
-    },
-  },
-  {
-    label: 'Men',
-    href: '/products?gender=men',
-    sub: [
-      { label: 'Wallets',       href: '/products?gender=men&type=wallets' },
-      { label: 'Card Holders',  href: '/products?gender=men&type=card-holders' },
-      { label: 'Laptop Bags',   href: '/products?gender=men&type=laptop-bags' },
-      { label: 'Briefcases',    href: '/products?gender=men&type=briefcases' },
-    ],
-    featured: {
-      image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&q=85',
-      label: 'Best Sellers',
-      href: '/products?gender=men&badge=best-seller',
-    },
-  },
-  {
-    label: 'Travel',
-    href: '/products?category=travel',
-    sub: [
-      { label: 'Passport Holders', href: '/products?category=travel&type=passport' },
-      { label: 'Duffle Bags',      href: '/products?category=travel&type=duffle' },
-      { label: 'Luggage Tags',     href: '/products?category=travel&type=luggage-tags' },
-      { label: 'Travel Kits',      href: '/products?category=travel&type=travel-kits' },
-    ],
-    featured: {
-      image: 'https://images.unsplash.com/photo-1565538810643-b5bdb714032a?w=400&q=85',
-      label: 'Travel Edit',
-      href: '/products?category=travel',
-    },
-  },
-  {
-    label: 'Collections',
-    href: '/products?category=collections',
-    sub: [
-      { label: 'New Arrivals',      href: '/products?badge=new' },
-      { label: 'Best Sellers',      href: '/products?badge=best-seller' },
-      { label: 'Online Exclusive',  href: '/products?badge=online-exclusive' },
-      { label: 'Limited Edition',   href: '/products?badge=limited-edition' },
-    ],
-    featured: {
-      image: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=400&q=85',
-      label: 'Explore All',
-      href: '/products',
-    },
-  },
-  {
-    label: 'Gifts',
-    href: '/products?category=gifts',
-    sub: [
-      { label: 'Gift Sets',  href: '/products?category=gifts&type=gift-sets' },
-      { label: 'Under ₹2,999', href: '/products?category=gifts&maxPrice=2999' },
-      { label: 'Under ₹4,999', href: '/products?category=gifts&maxPrice=4999' },
-      { label: 'Gift Cards', href: '/products?category=gifts&type=gift-cards' },
-    ],
-    featured: {
-      image: 'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=400&q=85',
-      label: 'Gift Guide',
-      href: '/products?category=gifts',
-    },
-  },
-]
+import useSiteContentStore from '@/store/siteContentStore'
 
 export default function Navbar() {
   const [searchOpen, setSearchOpen] = useState(false)
@@ -97,6 +19,8 @@ export default function Navbar() {
   const { isLoggedIn, user, isAdmin, logout } = useAuthStore()
   const announcementBar = useSettingsStore((s) => s.announcementBar)
   const wishlistCount = useWishlistStore((s) => s.items.length)
+  // Editable from admin → Storefront
+  const NAV_ITEMS = useSiteContentStore((s) => s.navMenu)
 
   const itemCount = items.reduce((sum, i) => sum + i.quantity, 0)
 

@@ -58,11 +58,11 @@ async function seedAll(prisma) {
     })
   }
 
-  for (const cat of categories) {
+  for (const [i, cat] of categories.entries()) {
     await prisma.category.upsert({
       where: { id: cat.id },
       update: {},
-      create: { id: cat.id, name: cat.name, icon: cat.icon ?? '', image: cat.image ?? '', sub: cat.sub ?? [] },
+      create: { id: cat.id, name: cat.name, icon: cat.icon ?? '', image: cat.image ?? '', sub: cat.sub ?? [], sortOrder: i },
     })
   }
 
@@ -157,6 +157,9 @@ async function seedAll(prisma) {
             variant: item.variant ?? {},
           })),
         },
+        events: {
+          create: { type: 'created', message: 'Order placed and payment received', actorName: o.customerName, createdAt: new Date(o.createdAt) },
+        },
       },
     })
   }
@@ -170,7 +173,7 @@ async function seedAll(prisma) {
       tagline: 'Handcrafted Leather Goods',
       announcementBar: 'Free shipping on orders above ₹999 · Use code FOLDX10 for 10% off · Handcrafted in India',
       freeShippingThreshold: 999,
-      supportEmail: 'care@foldx.in',
+      supportEmail: 'foldx01@gmail.com',
       supportPhone: '1800-001-234',
       address: '42 MG Road, Bangalore, Karnataka — 560001',
       instagramHandle: '@foldx.in',
@@ -179,7 +182,58 @@ async function seedAll(prisma) {
     },
   })
 
+  await ensureVariantsFromColors(prisma)
+  await ensureDefaultPages(prisma)
+  await ensureDefaultCoupons(prisma)
+
   return { adminEmail: ADMIN_EMAIL, adminPassword: ADMIN_PASSWORD, demoCustomerEmail: mockCustomers[0].email, demoPassword: DEMO_PASSWORD }
+}
+
+// Gives every product that has colours but no variants one variant per colour,
+// splitting its current stock across them (remainder on the first). Idempotent,
+// so it doubles as the backfill for databases created before variants existed.
+async function ensureVariantsFromColors(prisma) {
+  const products = await prisma.product.findMany({ include: { variants: { select: { id: true } } } })
+  let created = 0
+  for (const p of products) {
+    const colors = Array.isArray(p.colors) ? p.colors.filter(Boolean) : []
+    if (p.variants.length || colors.length === 0) continue
+    const each = Math.floor(p.stock / colors.length)
+    const remainder = p.stock - each * colors.length
+    await prisma.productVariant.createMany({
+      data: colors.map((color, i) => ({
+        productId: p.id,
+        color,
+        stock: each + (i === 0 ? remainder : 0),
+        sortOrder: i,
+      })),
+    })
+    created += colors.length
+  }
+  return created
+}
+
+// Creates the starter content pages (About, FAQ, policies) that don't exist
+// yet, as unpublished drafts — the policy texts are placeholders to review.
+async function ensureDefaultPages(prisma) {
+  const defaults = require('./defaultPages')
+  let created = 0
+  for (const [i, page] of defaults.entries()) {
+    if (await prisma.page.findUnique({ where: { slug: page.slug } })) continue
+    await prisma.page.create({ data: { ...page, isPublished: false, sortOrder: i } })
+    created++
+  }
+  return created
+}
+
+// FOLDX10 is advertised in the default announcement bar, so make it real:
+// 10% off, capped at ₹1,500, once per customer.
+async function ensureDefaultCoupons(prisma) {
+  if (await prisma.coupon.findUnique({ where: { code: 'FOLDX10' } })) return 0
+  await prisma.coupon.create({
+    data: { code: 'FOLDX10', description: '10% off your order', type: 'percent', value: 10, maxDiscount: 1500, perCustomerLimit: 1, targetIds: [] },
+  })
+  return 1
 }
 
 // Wipes everything the demo seeds (in FK-safe order) — used by the admin
@@ -189,13 +243,17 @@ async function seedAll(prisma) {
 async function wipeAll(prisma) {
   await prisma.orderItem.deleteMany()
   await prisma.order.deleteMany()
+  await prisma.coupon.deleteMany()
   await prisma.review.deleteMany()
   await prisma.product.deleteMany()
   await prisma.category.deleteMany()
   await prisma.banner.deleteMany()
   await prisma.auditLog.deleteMany()
+  await prisma.siteContent.deleteMany()
+  await prisma.page.deleteMany()
+  await prisma.contactMessage.deleteMany()
   await prisma.user.deleteMany()
   await prisma.settings.deleteMany()
 }
 
-module.exports = { seedAll, wipeAll, loadMockData }
+module.exports = { seedAll, wipeAll, loadMockData, ensureVariantsFromColors, ensureDefaultPages, ensureDefaultCoupons }

@@ -13,6 +13,17 @@ const DEFAULTS = {
   instagramHandle: '',
   currency: 'INR',
   razorpayKeyId: '',
+  gstin: '',
+  legalName: '',
+  state: '',
+  defaultHsnCode: '4202',
+  defaultGstRate: 18,
+  flatShippingFee: 99,
+  giftWrapFee: 149,
+  returnWindowDays: 10,
+  codEnabled: true,
+  codFee: 49,
+  codMaxOrder: 15000,
 }
 
 const useSettingsStore = create(

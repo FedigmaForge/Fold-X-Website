@@ -7,9 +7,12 @@ import {
 import StatCard from '@/components/admin/StatCard'
 import SalesChart from '@/components/admin/SalesChart'
 import RecentOrdersTable from '@/components/admin/RecentOrdersTable'
+import LowStockCard from '@/components/admin/LowStockCard'
+import CodToConfirmCard from '@/components/admin/CodToConfirmCard'
 import { getAnalytics, getOrders, getAllBanners, saveBanner, deleteBanner, uploadImage, resetDemoData } from '@/services/api'
 import { formatNumber } from '@/utils/formatCurrency'
 import toast from 'react-hot-toast'
+import { usePermissions } from '@/utils/permissions'
 
 const EMPTY_FORM = {
   title: '', label: '', link: '',
@@ -265,6 +268,7 @@ export default function DashboardPage() {
   const [banners, setBanners]       = useState([])
   const [modalOpen, setModalOpen]   = useState(false)
   const [editing, setEditing]       = useState(null)
+  const { canEditCatalog, isSuperAdmin } = usePermissions()
 
   const activeBanners = [...banners].sort((a, b) => a.order - b.order)
 
@@ -288,24 +292,36 @@ export default function DashboardPage() {
 
   const handleToggle = async (banner) => {
     const updated = { ...banner, isActive: !banner.isActive }
-    await saveBanner(updated)
-    await loadBanners()
-    toast.success(updated.isActive ? 'Banner is now live!' : 'Banner hidden from homepage')
+    try {
+      await saveBanner(updated)
+      await loadBanners()
+      toast.success(updated.isActive ? 'Banner is now live!' : 'Banner hidden from homepage')
+    } catch (err) {
+      toast.error(err.message)
+    }
   }
 
   const handleDelete = async (id, title) => {
     if (!confirm(`Remove banner "${title}" from the homepage?`)) return
-    await deleteBanner(id)
-    await loadBanners()
-    toast.success('Banner removed')
+    try {
+      await deleteBanner(id)
+      await loadBanners()
+      toast.success('Banner removed')
+    } catch (err) {
+      toast.error(err.message)
+    }
   }
 
   const handleReset = async () => {
     if (!confirm('Reset all store data to demo defaults? This cannot be undone.')) return
-    await resetDemoData()
-    loadAnalytics()
-    loadBanners()
-    toast.success('Store reset to defaults')
+    try {
+      await resetDemoData()
+      loadAnalytics()
+      loadBanners()
+      toast.success('Store reset to defaults')
+    } catch (err) {
+      toast.error(err.message)
+    }
   }
 
   const s = analytics?.stats
@@ -318,12 +334,12 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-400 mt-1">Changes here reflect on the frontend immediately.</p>
         </div>
-        <button
+        {isSuperAdmin && <button
           onClick={handleReset}
           className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-500 border border-gray-200 hover:border-red-200 px-3 py-1.5 rounded-lg transition-colors"
         >
           <RotateCcw size={12} /> Reset Demo Data
-        </button>
+        </button>}
       </div>
 
       {/* ── HERO BANNER SECTION ────────────────────────────────────────── */}
@@ -342,17 +358,19 @@ export default function DashboardPage() {
               </a>
             </p>
           </div>
-          <button
+          {canEditCatalog && <button
             onClick={openAdd}
             className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
           >
             <Plus size={15} /> Add Banner
-          </button>
+          </button>}
         </div>
 
         {/* Banner grid */}
         <div className="p-5">
-          {activeBanners.length === 0 ? (
+          {activeBanners.length === 0 && !canEditCatalog ? (
+            <p className="text-sm text-gray-400 text-center py-10">No hero banners yet</p>
+          ) : activeBanners.length === 0 ? (
             <button
               onClick={openAdd}
               className="w-full h-40 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center hover:border-violet-400 hover:bg-violet-50 transition-colors group"
@@ -391,7 +409,7 @@ export default function DashboardPage() {
                     </div>
 
                     {/* Action buttons (top-right, shown on hover) */}
-                    <div className="absolute top-2.5 right-2.5 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {canEditCatalog && <div className="absolute top-2.5 right-2.5 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => handleToggle(b)}
                         title={b.isActive ? 'Hide from homepage' : 'Show on homepage'}
@@ -413,7 +431,7 @@ export default function DashboardPage() {
                       >
                         <Trash2 size={13} className="text-red-500" />
                       </button>
-                    </div>
+                    </div>}
 
                     {/* Text overlay */}
                     <div className="absolute bottom-0 left-0 right-0 p-3">
@@ -438,25 +456,25 @@ export default function DashboardPage() {
                     ) : (
                       <span className="text-[10px] text-orange-500">⚠ Mobile image missing</span>
                     )}
-                    <button
+                    {canEditCatalog && <button
                       onClick={() => openEdit(b)}
                       className="ml-auto text-[10px] text-violet-500 hover:text-violet-700 font-medium"
                     >
                       Edit →
-                    </button>
+                    </button>}
                   </div>
                 </div>
               ))}
 
               {/* Add new tile */}
-              <button
+              {canEditCatalog && <button
                 onClick={openAdd}
                 className="h-44 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center hover:border-violet-400 hover:bg-violet-50 transition-colors group"
               >
                 <Plus size={24} className="text-gray-300 group-hover:text-violet-400 transition-colors mb-1.5" />
                 <p className="text-xs text-gray-400 group-hover:text-violet-500 font-medium">Add Banner</p>
                 <p className="text-[10px] text-gray-300 mt-0.5">1920×720 + 768×960 px</p>
-              </button>
+              </button>}
             </div>
           )}
 
@@ -466,6 +484,9 @@ export default function DashboardPage() {
           </p>
         </div>
       </div>
+
+      <CodToConfirmCard />
+      <LowStockCard />
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

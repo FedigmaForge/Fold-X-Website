@@ -49,6 +49,7 @@ export default function ProductListingPage() {
 
   const category   = searchParams.get('category')  || ''
   const gender     = searchParams.get('gender')     || ''
+  const type       = searchParams.get('type')       || '' // subcategory slug from menu links
   const search     = searchParams.get('search')     || ''
   const sort       = searchParams.get('sort')       || 'newest'
   const badge      = searchParams.get('badge')      || ''
@@ -66,12 +67,12 @@ export default function ProductListingPage() {
 
   const clearAll = () => setSearchParams({})
 
-  const activeFilterCount = [category, gender, badge, material, color, minPrice, maxPrice]
+  const activeFilterCount = [category, gender, type, badge, material, color, minPrice, maxPrice]
     .filter(Boolean).length
 
   useEffect(() => {
     setLoading(true)
-    getProducts({ category: category || gender, search, sort, minPrice, maxPrice }).then((data) => {
+    getProducts({ category: category || gender, type, search, sort, minPrice, maxPrice }).then((data) => {
       let filtered = [...data]
       if (badge)    filtered = filtered.filter((p) => p.badge?.toLowerCase().replace(/\s/g, '-') === badge)
       if (material) filtered = filtered.filter((p) => p.material === material)
@@ -79,15 +80,17 @@ export default function ProductListingPage() {
       setProducts(filtered)
       setLoading(false)
     })
-  }, [category, gender, search, sort, badge, material, color, minPrice, maxPrice])
+  }, [category, gender, type, search, sort, badge, material, color, minPrice, maxPrice])
 
-  const pageTitle = search
+  const typeLabel = type.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+  const baseTitle = search
     ? `Search: "${search}"`
     : gender
       ? gender === 'women' ? "Women's Collection" : "Men's Collection"
       : category
         ? categories.find((c) => c.id === category)?.name || category
         : 'All Products'
+  const pageTitle = type && !search ? `${baseTitle} · ${typeLabel}` : baseTitle
 
   const renderFilterPanel = () => (
     <div>

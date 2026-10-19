@@ -10,8 +10,10 @@ const useCartStore = create(
       openCart: () => set({ isOpen: true }),
       closeCart: () => set({ isOpen: false }),
 
-      addItem: (product, quantity = 1, variant = {}) => {
-        const key = `${product.id}-${JSON.stringify(variant)}`
+      // variantId identifies the exact colour/size bought (its own stock);
+      // `variant` is the human-readable { color, size } shown in the bag.
+      addItem: (product, quantity = 1, variant = {}, variantId = null) => {
+        const key = `${product.id}-${variantId ?? JSON.stringify(variant)}`
         set((state) => {
           const existing = state.items.find((i) => i.key === key)
           if (existing) {
@@ -21,7 +23,7 @@ const useCartStore = create(
               ),
             }
           }
-          return { items: [...state.items, { key, product, quantity, variant }] }
+          return { items: [...state.items, { key, product, quantity, variant, variantId }] }
         })
       },
 

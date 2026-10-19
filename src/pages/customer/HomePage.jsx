@@ -6,6 +6,7 @@ import ScrollReveal from '@/components/ui/ScrollReveal'
 import { journalPosts } from '@/data/journalData'
 import { formatDate } from '@/utils/formatDate'
 import { getFeaturedProducts, getProducts, getBanners } from '@/services/api'
+import useSiteContentStore from '@/store/siteContentStore'
 
 const MARQUEE_TEXT = [
   'Handcrafted in India',
@@ -14,29 +15,6 @@ const MARQUEE_TEXT = [
   'RFID Protected Wallets',
   '10-Day Easy Returns',
   'Lifetime Craft Guarantee',
-]
-
-const CATEGORY_TILES = [
-  {
-    id: 'women', label: 'Women', sub: 'Bags & Wallets',
-    href: '/products?gender=women',
-    image: 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=600&q=85',
-  },
-  {
-    id: 'men', label: 'Men', sub: 'Wallets & Bags',
-    href: '/products?gender=men',
-    image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=600&q=85',
-  },
-  {
-    id: 'travel', label: 'Travel', sub: 'Passport & Duffle',
-    href: '/products?category=travel',
-    image: 'https://images.unsplash.com/photo-1565538810643-b5bdb714032a?w=600&q=85',
-  },
-  {
-    id: 'gifts', label: 'Gifts', sub: 'Curated Sets',
-    href: '/products?category=gifts',
-    image: 'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=600&q=85',
-  },
 ]
 
 const MATERIAL_PROMISE = [
@@ -59,6 +37,9 @@ export default function HomePage() {
   const [featured, setFeatured] = useState([])
   const [trending, setTrending] = useState([])
   const [loading, setLoading] = useState(true)
+  // Category tiles + editorial block are editable from admin → Storefront
+  const categoryTiles = useSiteContentStore((s) => s.homeTiles)
+  const editorial = useSiteContentStore((s) => s.homeEditorial)
 
   useEffect(() => {
     getBanners().then(setBanners)
@@ -104,8 +85,8 @@ export default function HomePage() {
           <h2 className="font-serif text-4xl lg:text-5xl text-brown font-light">The Collections</h2>
         </ScrollReveal>
         <ScrollReveal delay={100} className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-          {CATEGORY_TILES.map((cat) => (
-            <Link key={cat.id} to={cat.href} className="group block relative overflow-hidden">
+          {categoryTiles.map((cat) => (
+            <Link key={`${cat.label}-${cat.href}`} to={cat.href} className="group block relative overflow-hidden">
               <div className="relative overflow-hidden" style={{ aspectRatio: '2/3' }}>
                 <img
                   src={cat.image}
@@ -129,25 +110,27 @@ export default function HomePage() {
           {/* Image */}
           <div className="relative overflow-hidden" style={{ aspectRatio: '4/5' }}>
             <img
-              src="https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=900&q=85"
-              alt="New Collection"
+              src={editorial.image}
+              alt={editorial.title.replace(/\n/g, ' ')}
               className="w-full h-full object-cover"
             />
           </div>
           {/* Text */}
           <div className="px-6 lg:px-16 py-12 lg:py-0">
-            <p className="text-[10px] tracking-luxury font-sans uppercase text-brown-mid mb-5">New Collection · 2024</p>
-            <h2 className="font-serif text-4xl lg:text-5xl xl:text-6xl text-brown font-light leading-tight">
-              The Heritage<br />Edit
+            {editorial.eyebrow && (
+              <p className="text-[10px] tracking-luxury font-sans uppercase text-brown-mid mb-5">{editorial.eyebrow}</p>
+            )}
+            <h2 className="font-serif text-4xl lg:text-5xl xl:text-6xl text-brown font-light leading-tight whitespace-pre-line">
+              {editorial.title}
             </h2>
-            <p className="mt-6 text-sm font-sans font-light text-brown-mid leading-relaxed max-w-sm">
-              Rooted in old-world craft and finished for the modern wardrobe. Each piece is cut from a single hide, stitched by hand, and designed to outlast trends by decades.
+            <p className="mt-6 text-sm font-sans font-light text-brown-mid leading-relaxed max-w-sm whitespace-pre-line">
+              {editorial.body}
             </p>
             <Link
-              to="/products?badge=new"
+              to={editorial.ctaHref}
               className="inline-block mt-8 text-[11px] tracking-luxury font-sans uppercase text-brown border-b border-brown pb-0.5 hover:text-brown-mid hover:border-brown-mid transition-colors"
             >
-              Explore the Collection
+              {editorial.ctaLabel}
             </Link>
           </div>
         </ScrollReveal>

@@ -11,18 +11,24 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  name         String
-  email        String   @unique
-  passwordHash String
-  phone        String?
-  city         String?
-  role         String   @default("customer") // "customer" | "support" | "manager" | "superadmin"
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  id               String   @id @default(cuid())
+  name             String
+  email            String   @unique
+  passwordHash     String
+  phone            String?
+  city             String?
+  role             String   @default("customer") // "customer" | "support" | "manager" | "superadmin"
+  isActive         Boolean  @default(true)
+  // Two-step login (staff). Secrets are AES-GCM encrypted at rest.
+  twoFactorEnabled Boolean  @default(false)
+  twoFactorSecret  String? // encrypted TOTP secret
+  twoFactorPending String? // encrypted secret awaiting first code during setup
+  backupCodes      Json? // bcrypt hashes of unused one-time backup codes
+  createdAt        DateTime @default(now())
 
   orders  Order[]
   reviews Review[]
+  returns ReturnRequest[]
 }
 
 // Records staff actions for accountability — who changed what, when.
@@ -32,46 +38,95 @@ model AuditLog {
   actorId    String?
   actorName  String
   actorRole  String
-  action     String   // e.g. "product.create", "order.status_update"
-  entityType String   // "Product" | "Order" | "Banner" | "Review" | "Settings" | "Staff"
+  action     String // e.g. "product.create", "order.status_update"
+  entityType String // "Product" | "Order" | "Banner" | "Review" | "Settings" | "Staff"
   entityId   String?
   summary    String
   createdAt  DateTime @default(now())
 }
 
 model Category {
-  id    String @id
-  name  String
-  icon  String @default("")
-  image String @default("")
-  sub   Json
+  id        String  @id // URL slug, e.g. "women" — referenced by Product.categoryId
+  name      String
+  icon      String  @default("")
+  image     String  @default("")
+  sub       Json // string[] of subcategory names
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true) // hidden from storefront filters/menus when false
 }
 
 model Product {
-  id           String   @id @default(cuid())
-  name         String
-  slug         String   @unique
-  category     String
-  categoryId   String
-  subcategory  String?
-  material     String?
-  price        Float
-  originalPrice Float?
-  discount     Float    @default(0)
-  rating       Float    @default(0)
-  reviewCount  Int      @default(0)
-  stock        Int      @default(0)
-  badge        String?
-  colors       Json
-  images       Json
-  description  String   @default("")
-  features     Json
-  isFeatured   Boolean  @default(false)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  id                String    @id @default(cuid())
+  name              String
+  slug              String    @unique
+  category          String
+  categoryId        String
+  subcategory       String?
+  material          String?
+  price             Float
+  originalPrice     Float?
+  discount          Float     @default(0)
+  rating            Float     @default(0)
+  reviewCount       Int       @default(0)
+  stock             Int       @default(0) // = sum of variant stock when the product has variants
+  sku               String?   @unique // for products without variants
+  lowStockThreshold Int       @default(5)
+  costPrice         Float? // what one unit costs FoldX to make/buy — for the profit view
+  hsnCode           String? // falls back to Settings.defaultHsnCode when blank
+  gstRate           Float? // percent; falls back to Settings.defaultGstRate when null
+  badge             String?
+  colors            Json
+  images            Json
+  description       String    @default("")
+  features          Json
+  isFeatured        Boolean   @default(false)
+  isActive          Boolean   @default(true) // false = draft
+  publishAt         DateTime? // scheduled: hidden from the storefront until this time
+  metaTitle         String    @default("")
+  metaDescription   String    @default("")
+  createdAt         DateTime  @default(now())
 
-  reviews    Review[]
+  reviews        Review[]
+  orderItems     OrderItem[]
+  variants       ProductVariant[]
+  stockMovements StockMovement[]
+}
+
+// A purchasable option of a product (colour and/or size) with its own stock.
+// Products with no variants keep using Product.stock directly.
+model ProductVariant {
+  id        String  @id @default(cuid())
+  productId String
+  color     String  @default("")
+  size      String  @default("")
+  sku       String? @unique
+  stock     Int     @default(0)
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
   orderItems OrderItem[]
+  movements  StockMovement[]
+
+  @@unique([productId, color, size])
+}
+
+// Every stock change, for the per-product stock history.
+model StockMovement {
+  id        String   @id @default(cuid())
+  productId String
+  variantId String?
+  change    Int // negative = out, positive = in
+  reason    String // "sale" | "cancel" | "return" | "adjustment" | "import"
+  note      String?
+  orderId   String?
+  actorName String?
+  createdAt DateTime @default(now())
+
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([productId, createdAt])
 }
 
 model Banner {
@@ -86,38 +141,76 @@ model Banner {
 }
 
 model Order {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   userId          String?
   customerName    String
   customerEmail   String
   subtotal        Float
-  shipping        Float    @default(0)
-  giftWrapFee     Float    @default(0)
+  shipping        Float     @default(0)
+  giftWrapFee     Float     @default(0)
+  discount        Float     @default(0) // subtracted from subtotal (before shipping/gift wrap)
+  paymentMethod   String    @default("online") // "online" (Razorpay) | "cod"
+  codFee          Float     @default(0)
+  codConfirmedAt  DateTime? // staff confirmed the COD order with the customer
+  codRefused      Boolean   @default(false) // customer refused / didn't accept delivery (RTO)
+  cartToken       String? // set when the order came from an abandoned-cart recovery link / tracked checkout
+  discountCode    String? // the code entered, or the automatic discount's name
+  couponId        String?
   total           Float
-  status          String   @default("pending") // pending|processing|shipped|delivered|cancelled
-  paymentStatus   String   @default("pending")  // pending|paid|refunded
+  status          String    @default("pending") // pending|processing|shipped|delivered|cancelled
+  paymentStatus   String    @default("pending") // pending|paid|partially_refunded|refunded
+  refundedAmount  Float     @default(0)
+  courier         String?
+  trackingNumber  String?
+  cancelReason    String?
+  // True while this order's quantities are subtracted from Product.stock.
+  // Cancelling restores stock and clears it; un-cancelling deducts again.
+  // Orders created before stock tracking existed stay false, so cancelling
+  // them never inflates stock that was never deducted.
+  stockDeducted   Boolean   @default(false)
   paymentId       String?
   razorpayOrderId String?
   address         Json
-  giftWrap        Boolean  @default(false)
+  giftWrap        Boolean   @default(false)
   giftNote        String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  user  User?       @relation(fields: [userId], references: [id])
-  items OrderItem[]
+  user        User?                @relation(fields: [userId], references: [id])
+  items       OrderItem[]
+  events      OrderEvent[]
+  returns     ReturnRequest[]
+  coupon      Coupon?              @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  redemptions CouponRedemption[]
+  payments    PaymentTransaction[]
+}
+
+// Per-order timeline: status changes, internal staff notes, refunds, shipping
+// updates. Unlike AuditLog (staff accountability across the whole admin), this
+// is the order's own history, shown on the order detail page.
+model OrderEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  type      String // "created" | "status" | "note" | "refund" | "shipping"
+  message   String
+  actorName String?
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model OrderItem {
-  id              String @id @default(cuid())
+  id              String  @id @default(cuid())
   orderId         String
   productId       String?
+  variantId       String?
   productSnapshot Json
   quantity        Int
   variant         Json
 
-  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product? @relation(fields: [productId], references: [id])
+  order          Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product        Product?        @relation(fields: [productId], references: [id])
+  productVariant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 }
 
 model Review {
@@ -136,15 +229,215 @@ model Review {
 }
 
 model Settings {
-  id                     Int    @id @default(1)
-  storeName              String @default("FoldX")
-  tagline                String @default("Handcrafted Leather Goods")
-  announcementBar        String @default("")
-  freeShippingThreshold  Float  @default(999)
-  supportEmail           String @default("")
-  supportPhone           String @default("")
-  address                String @default("")
-  instagramHandle        String @default("")
-  currency               String @default("INR")
-  razorpayKeyId          String @default("")
+  id                    Int     @id @default(1)
+  storeName             String  @default("FoldX")
+  tagline               String  @default("Handcrafted Leather Goods")
+  announcementBar       String  @default("")
+  freeShippingThreshold Float   @default(999)
+  supportEmail          String  @default("")
+  supportPhone          String  @default("")
+  address               String  @default("")
+  instagramHandle       String  @default("")
+  currency              String  @default("INR")
+  razorpayKeyId         String  @default("")
+  gstin                 String  @default("")
+  state                 String  @default("") // seller's state — decides CGST+SGST vs IGST on invoices
+  defaultHsnCode        String  @default("4202")
+  defaultGstRate        Float   @default(18)
+  flatShippingFee       Float   @default(99) // charged below freeShippingThreshold
+  giftWrapFee           Float   @default(149)
+  returnWindowDays      Int     @default(10) // days after delivery a customer can request a return
+  codEnabled            Boolean @default(true)
+  codFee                Float   @default(49)
+  codMaxOrder           Float   @default(15000) // COD hidden above this order total
+  codMaxRefusals        Int     @default(2) // refused COD deliveries before COD is withheld
+  codMaxOpen            Int     @default(2) // unconfirmed/undelivered COD orders allowed at once
+  shippingCostPerOrder  Float   @default(0) // estimated courier cost per shipped order, for the profit view
+  require2FA            Boolean @default(false) // every staff member must use two-step login
+  legalName             String  @default("")
+}
+
+// Editable storefront content that isn't products or categories — the navbar
+// mega-menu, homepage category tiles, homepage editorial block. One row per
+// section, keyed by name, holding that section's JSON. When a row is missing
+// the storefront falls back to its built-in defaults.
+model SiteContent {
+  key       String   @id // "navMenu" | "homeTiles" | "homeEditorial" | "footer"
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// Editable content pages (About, FAQ, policies…) served at /pages/:slug.
+model Page {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  title           String
+  body            String   @default("") // lightweight markdown: #/## headings, - lists, **bold**, [links](/x)
+  metaDescription String   @default("")
+  isPublished     Boolean  @default(false)
+  showInFooter    Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+}
+
+// Messages from the storefront contact form.
+model ContactMessage {
+  id           String   @id @default(cuid())
+  name         String
+  email        String
+  phone        String?
+  orderId      String?
+  subject      String
+  message      String
+  status       String   @default("new") // new | open | closed
+  internalNote String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// Customer return requests against a delivered order.
+model ReturnRequest {
+  id        String   @id @default(cuid())
+  orderId   String
+  userId    String?
+  items     Json // [{ itemId, name, quantity }]
+  reason    String
+  details   String   @default("")
+  status    String   @default("requested") // requested | approved | rejected | received | closed
+  adminNote String   @default("")
+  restocked Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [userId], references: [id])
+}
+
+// A discount: either a code customers type at checkout, or an automatic
+// discount (isAutomatic) applied without a code. One discount per order — the
+// best of the entered code and any automatic one.
+model Coupon {
+  id               String    @id @default(cuid())
+  code             String    @unique // upper-case; for automatic discounts an internal name
+  description      String    @default("")
+  isAutomatic      Boolean   @default(false)
+  type             String // "percent" | "fixed" | "free_shipping"
+  value            Float     @default(0) // percent (0–100) or rupees; unused for free_shipping
+  maxDiscount      Float? // cap for percent discounts, in rupees
+  minSubtotal      Float     @default(0)
+  appliesTo        String    @default("all") // "all" | "categories" | "products"
+  targetIds        Json // category ids or product ids, per appliesTo
+  startsAt         DateTime?
+  endsAt           DateTime?
+  usageLimit       Int? // total uses across all customers
+  perCustomerLimit Int? // uses per customer email
+  firstOrderOnly   Boolean   @default(false)
+  isActive         Boolean   @default(true)
+  usedCount        Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  orders      Order[]
+  redemptions CouponRedemption[]
+}
+
+// One row per order that used a coupon — drives usage limits and the per-coupon stats.
+model CouponRedemption {
+  id        String   @id @default(cuid())
+  couponId  String
+  orderId   String
+  email     String
+  discount  Float
+  createdAt DateTime @default(now())
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([couponId, orderId])
+  @@index([couponId, email])
+}
+
+// Staff-side profile for a customer, keyed by email so it covers guests as
+// well as registered accounts. Created on first edit; absent = defaults.
+model CustomerProfile {
+  email       String   @id // lower-case
+  notes       String   @default("")
+  tags        Json // string[], e.g. ["VIP", "Wholesale"]
+  isBlocked   Boolean  @default(false) // can't place orders (and can't log in, if registered)
+  blockReason String   @default("")
+  codDisabled Boolean  @default(false) // COD withheld for this customer only
+  updatedAt   DateTime @updatedAt
+}
+
+// Every money movement: an online payment captured, COD cash collected, or a
+// refund. Settlement fields are filled in when matched against Razorpay's
+// settlement report (or when COD cash is remitted by the courier).
+model PaymentTransaction {
+  id               String    @id @default(cuid())
+  orderId          String?
+  type             String // "capture" | "refund"
+  method           String // "online" | "cod"
+  amount           Float // always positive, in rupees
+  gatewayRef       String? // Razorpay payment id (pay_…) or refund id (rfnd_…)
+  settlementStatus String    @default("pending") // "pending" | "settled" | "na" (mock / nothing to settle)
+  settledAt        DateTime?
+  settlementId     String?
+  settlementUtr    String?
+  fee              Float? // gateway fee (excl. tax)
+  tax              Float? // GST on the gateway fee
+  notes            String    @default("")
+  actorName        String?
+  createdAt        DateTime  @default(now())
+
+  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([gatewayRef])
+  @@index([createdAt])
+}
+
+// One row per settlement report import / sync, for the audit trail and the
+// list of report lines that didn't match anything.
+model SettlementImport {
+  id        String   @id @default(cuid())
+  source    String // "csv" | "razorpay"
+  label     String // file name or date range
+  rows      Int
+  matched   Int
+  unmatched Json // [{ ref, type, amount, reason }]
+  actorName String?
+  createdAt DateTime @default(now())
+}
+
+// Staff sign-in attempts (successful and failed), newest first on the account page.
+model StaffLogin {
+  id        String   @id @default(cuid())
+  userId    String?
+  email     String
+  success   Boolean
+  reason    String   @default("") // e.g. "wrong password", "wrong code", "ok", "backup code"
+  ip        String   @default("")
+  userAgent String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// A checkout someone started (email entered) but didn't finish.
+model AbandonedCart {
+  id             String    @id @default(cuid())
+  token          String    @unique // random, stored in the shopper's browser; also the recovery link id
+  email          String
+  name           String    @default("")
+  phone          String    @default("")
+  items          Json // [{ productId, variantId, quantity, name, price, image, variant }]
+  subtotal       Float
+  lastActivityAt DateTime  @default(now())
+  remindedAt     DateTime?
+  reminderCount  Int       @default(0)
+  recoveredAt    DateTime?
+  orderId        String?
+  createdAt      DateTime  @default(now())
+
+  @@index([email])
 }

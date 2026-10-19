@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { ImagePlus, X, Link as LinkIcon, Loader2 } from 'lucide-react'
+import { ImagePlus, X, Link as LinkIcon, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { uploadImage } from '@/services/api'
 import toast from 'react-hot-toast'
 
@@ -8,6 +8,8 @@ export default function ImageUploader({ images = [], onChange, maxFiles = 6 }) {
   const [urlInput, setUrlInput] = useState('')
   const [urlMode, setUrlMode] = useState(false)
   const [uploading, setUploading] = useState(false)
+  // Single-image mode (e.g. storefront menu/tile images): no "main photo" wording
+  const single = maxFiles === 1
 
   const onDrop = useCallback(
     async (acceptedFiles) => {
@@ -45,6 +47,15 @@ export default function ImageUploader({ images = [], onChange, maxFiles = 6 }) {
     onChange?.(images.filter((_, i) => i !== index))
   }
 
+  // Swap with a neighbour — the first image is the main photo, the second the hover image
+  const shift = (index, dir) => {
+    const j = index + dir
+    if (j < 0 || j >= images.length) return
+    const next = [...images]
+    ;[next[index], next[j]] = [next[j], next[index]]
+    onChange?.(next)
+  }
+
   const getImgSrc = (img) => (typeof img === 'string' ? img : img?.preview || img?.url || '')
 
   return (
@@ -59,7 +70,7 @@ export default function ImageUploader({ images = [], onChange, maxFiles = 6 }) {
               className="w-full h-full object-cover"
               onError={(e) => { e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" fill="%23f3f4f6"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%239ca3af" font-size="10">No image</text></svg>' }}
             />
-            {i === 0 && (
+            {i === 0 && !single && (
               <span className="absolute bottom-0 left-0 right-0 text-center text-[10px] bg-violet-600 text-white py-0.5">
                 Main
               </span>
@@ -71,6 +82,16 @@ export default function ImageUploader({ images = [], onChange, maxFiles = 6 }) {
             >
               <X size={10} />
             </button>
+            {!single && images.length > 1 && (
+              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button type="button" onClick={() => shift(i, -1)} disabled={i === 0} aria-label="Move earlier" className="w-5 h-5 rounded-full bg-white/90 text-gray-700 flex items-center justify-center disabled:invisible">
+                  <ChevronLeft size={12} />
+                </button>
+                <button type="button" onClick={() => shift(i, 1)} disabled={i === images.length - 1} aria-label="Move later" className="w-5 h-5 rounded-full bg-white/90 text-gray-700 flex items-center justify-center disabled:invisible">
+                  <ChevronRight size={12} />
+                </button>
+              </div>
+            )}
           </div>
         ))}
 
@@ -99,7 +120,9 @@ export default function ImageUploader({ images = [], onChange, maxFiles = 6 }) {
       </div>
 
       <p className="text-xs text-gray-400">
-        {images.length}/{maxFiles} images · First image is the main product photo
+        {single
+          ? (images.length ? 'Hover the image and click × to replace it' : 'Upload a JPG, PNG or WEBP, or paste a URL')
+          : `${images.length}/${maxFiles} images · First image is the main photo · hover an image to reorder`}
       </p>
 
       {/* URL input toggle */}
