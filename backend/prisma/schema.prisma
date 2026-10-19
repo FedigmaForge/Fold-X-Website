@@ -3,10 +3,11 @@ generator client {
 }
 
 datasource db {
-  // SQLite for local dev — zero setup. To move to Postgres later, change
-  // provider to "postgresql" and url to your connection string, then
-  // `npx prisma migrate dev` again. See development.md.
-  provider = "sqlite"
+  // MySQL on AWS RDS. The database (lms_management) is shared with other
+  // projects, so every FoldX table is prefixed "foldx_" via @@map. Never run
+  // `prisma migrate reset` or `prisma db push` against it — use
+  // `prisma migrate deploy` only.
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -29,6 +30,8 @@ model User {
   orders  Order[]
   reviews Review[]
   returns ReturnRequest[]
+
+  @@map("foldx_user")
 }
 
 // Records staff actions for accountability — who changed what, when.
@@ -41,18 +44,22 @@ model AuditLog {
   action     String // e.g. "product.create", "order.status_update"
   entityType String // "Product" | "Order" | "Banner" | "Review" | "Settings" | "Staff"
   entityId   String?
-  summary    String
+  summary    String   @db.Text
   createdAt  DateTime @default(now())
+
+  @@map("foldx_audit_log")
 }
 
 model Category {
   id        String  @id // URL slug, e.g. "women" — referenced by Product.categoryId
   name      String
   icon      String  @default("")
-  image     String  @default("")
+  image     String  @default("") @db.Text
   sub       Json // string[] of subcategory names
   sortOrder Int     @default(0)
   isActive  Boolean @default(true) // hidden from storefront filters/menus when false
+
+  @@map("foldx_category")
 }
 
 model Product {
@@ -77,19 +84,21 @@ model Product {
   badge             String?
   colors            Json
   images            Json
-  description       String    @default("")
+  description       String    @default("") @db.Text
   features          Json
   isFeatured        Boolean   @default(false)
   isActive          Boolean   @default(true) // false = draft
   publishAt         DateTime? // scheduled: hidden from the storefront until this time
-  metaTitle         String    @default("")
-  metaDescription   String    @default("")
+  metaTitle         String    @default("") @db.Text
+  metaDescription   String    @default("") @db.Text
   createdAt         DateTime  @default(now())
 
   reviews        Review[]
   orderItems     OrderItem[]
   variants       ProductVariant[]
   stockMovements StockMovement[]
+
+  @@map("foldx_product")
 }
 
 // A purchasable option of a product (colour and/or size) with its own stock.
@@ -109,6 +118,7 @@ model ProductVariant {
   movements  StockMovement[]
 
   @@unique([productId, color, size])
+  @@map("foldx_product_variant")
 }
 
 // Every stock change, for the per-product stock history.
@@ -118,7 +128,7 @@ model StockMovement {
   variantId String?
   change    Int // negative = out, positive = in
   reason    String // "sale" | "cancel" | "return" | "adjustment" | "import"
-  note      String?
+  note      String?  @db.Text
   orderId   String?
   actorName String?
   createdAt DateTime @default(now())
@@ -127,17 +137,20 @@ model StockMovement {
   variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
   @@index([productId, createdAt])
+  @@map("foldx_stock_movement")
 }
 
 model Banner {
   id           String  @id @default(cuid())
   title        String
   label        String?
-  link         String?
-  desktopImage String
-  mobileImage  String
+  link         String? @db.Text
+  desktopImage String  @db.Text
+  mobileImage  String  @db.Text
   isActive     Boolean @default(true)
   order        Int     @default(0)
+
+  @@map("foldx_banner")
 }
 
 model Order {
@@ -162,7 +175,7 @@ model Order {
   refundedAmount  Float     @default(0)
   courier         String?
   trackingNumber  String?
-  cancelReason    String?
+  cancelReason    String?   @db.Text
   // True while this order's quantities are subtracted from Product.stock.
   // Cancelling restores stock and clears it; un-cancelling deducts again.
   // Orders created before stock tracking existed stay false, so cancelling
@@ -172,7 +185,7 @@ model Order {
   razorpayOrderId String?
   address         Json
   giftWrap        Boolean   @default(false)
-  giftNote        String?
+  giftNote        String?   @db.Text
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -183,6 +196,8 @@ model Order {
   coupon      Coupon?              @relation(fields: [couponId], references: [id], onDelete: SetNull)
   redemptions CouponRedemption[]
   payments    PaymentTransaction[]
+
+  @@map("foldx_order")
 }
 
 // Per-order timeline: status changes, internal staff notes, refunds, shipping
@@ -192,11 +207,13 @@ model OrderEvent {
   id        String   @id @default(cuid())
   orderId   String
   type      String // "created" | "status" | "note" | "refund" | "shipping"
-  message   String
+  message   String   @db.Text
   actorName String?
   createdAt DateTime @default(now())
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("foldx_order_event")
 }
 
 model OrderItem {
@@ -211,6 +228,8 @@ model OrderItem {
   order          Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product        Product?        @relation(fields: [productId], references: [id])
   productVariant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@map("foldx_order_item")
 }
 
 model Review {
@@ -220,23 +239,25 @@ model Review {
   userName   String
   rating     Int
   title      String?
-  body       String?
+  body       String?  @db.Text
   date       DateTime @default(now())
   isApproved Boolean  @default(false)
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   user    User?   @relation(fields: [userId], references: [id])
+
+  @@map("foldx_review")
 }
 
 model Settings {
   id                    Int     @id @default(1)
   storeName             String  @default("FoldX")
   tagline               String  @default("Handcrafted Leather Goods")
-  announcementBar       String  @default("")
+  announcementBar       String  @default("") @db.Text
   freeShippingThreshold Float   @default(999)
   supportEmail          String  @default("")
   supportPhone          String  @default("")
-  address               String  @default("")
+  address               String  @default("") @db.Text
   instagramHandle       String  @default("")
   currency              String  @default("INR")
   razorpayKeyId         String  @default("")
@@ -255,6 +276,8 @@ model Settings {
   shippingCostPerOrder  Float   @default(0) // estimated courier cost per shipped order, for the profit view
   require2FA            Boolean @default(false) // every staff member must use two-step login
   legalName             String  @default("")
+
+  @@map("foldx_settings")
 }
 
 // Editable storefront content that isn't products or categories — the navbar
@@ -265,6 +288,8 @@ model SiteContent {
   key       String   @id // "navMenu" | "homeTiles" | "homeEditorial" | "footer"
   value     Json
   updatedAt DateTime @updatedAt
+
+  @@map("foldx_site_content")
 }
 
 // Editable content pages (About, FAQ, policies…) served at /pages/:slug.
@@ -272,13 +297,15 @@ model Page {
   id              String   @id @default(cuid())
   slug            String   @unique
   title           String
-  body            String   @default("") // lightweight markdown: #/## headings, - lists, **bold**, [links](/x)
-  metaDescription String   @default("")
+  body            String   @default("") @db.Text // lightweight markdown: #/## headings, - lists, **bold**, [links](/x)
+  metaDescription String   @default("") @db.Text
   isPublished     Boolean  @default(false)
   showInFooter    Boolean  @default(true)
   sortOrder       Int      @default(0)
   updatedAt       DateTime @updatedAt
   createdAt       DateTime @default(now())
+
+  @@map("foldx_page")
 }
 
 // Messages from the storefront contact form.
@@ -289,11 +316,13 @@ model ContactMessage {
   phone        String?
   orderId      String?
   subject      String
-  message      String
+  message      String   @db.Text
   status       String   @default("new") // new | open | closed
-  internalNote String   @default("")
+  internalNote String   @default("") @db.Text
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@map("foldx_contact_message")
 }
 
 // Customer return requests against a delivered order.
@@ -302,16 +331,18 @@ model ReturnRequest {
   orderId   String
   userId    String?
   items     Json // [{ itemId, name, quantity }]
-  reason    String
-  details   String   @default("")
+  reason    String   @db.Text
+  details   String   @default("") @db.Text
   status    String   @default("requested") // requested | approved | rejected | received | closed
-  adminNote String   @default("")
+  adminNote String   @default("") @db.Text
   restocked Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
   user  User? @relation(fields: [userId], references: [id])
+
+  @@map("foldx_return_request")
 }
 
 // A discount: either a code customers type at checkout, or an automatic
@@ -320,7 +351,7 @@ model ReturnRequest {
 model Coupon {
   id               String    @id @default(cuid())
   code             String    @unique // upper-case; for automatic discounts an internal name
-  description      String    @default("")
+  description      String    @default("") @db.Text
   isAutomatic      Boolean   @default(false)
   type             String // "percent" | "fixed" | "free_shipping"
   value            Float     @default(0) // percent (0–100) or rupees; unused for free_shipping
@@ -340,6 +371,8 @@ model Coupon {
 
   orders      Order[]
   redemptions CouponRedemption[]
+
+  @@map("foldx_coupon")
 }
 
 // One row per order that used a coupon — drives usage limits and the per-coupon stats.
@@ -356,18 +389,21 @@ model CouponRedemption {
 
   @@unique([couponId, orderId])
   @@index([couponId, email])
+  @@map("foldx_coupon_redemption")
 }
 
 // Staff-side profile for a customer, keyed by email so it covers guests as
 // well as registered accounts. Created on first edit; absent = defaults.
 model CustomerProfile {
   email       String   @id // lower-case
-  notes       String   @default("")
+  notes       String   @default("") @db.Text
   tags        Json // string[], e.g. ["VIP", "Wholesale"]
   isBlocked   Boolean  @default(false) // can't place orders (and can't log in, if registered)
-  blockReason String   @default("")
+  blockReason String   @default("") @db.Text
   codDisabled Boolean  @default(false) // COD withheld for this customer only
   updatedAt   DateTime @updatedAt
+
+  @@map("foldx_customer_profile")
 }
 
 // Every money movement: an online payment captured, COD cash collected, or a
@@ -386,7 +422,7 @@ model PaymentTransaction {
   settlementUtr    String?
   fee              Float? // gateway fee (excl. tax)
   tax              Float? // GST on the gateway fee
-  notes            String    @default("")
+  notes            String    @default("") @db.Text
   actorName        String?
   createdAt        DateTime  @default(now())
 
@@ -394,6 +430,7 @@ model PaymentTransaction {
 
   @@index([gatewayRef])
   @@index([createdAt])
+  @@map("foldx_payment_transaction")
 }
 
 // One row per settlement report import / sync, for the audit trail and the
@@ -407,6 +444,8 @@ model SettlementImport {
   unmatched Json // [{ ref, type, amount, reason }]
   actorName String?
   createdAt DateTime @default(now())
+
+  @@map("foldx_settlement_import")
 }
 
 // Staff sign-in attempts (successful and failed), newest first on the account page.
@@ -417,10 +456,11 @@ model StaffLogin {
   success   Boolean
   reason    String   @default("") // e.g. "wrong password", "wrong code", "ok", "backup code"
   ip        String   @default("")
-  userAgent String   @default("")
+  userAgent String   @default("") @db.Text
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
+  @@map("foldx_staff_login")
 }
 
 // A checkout someone started (email entered) but didn't finish.
@@ -440,4 +480,5 @@ model AbandonedCart {
   createdAt      DateTime  @default(now())
 
   @@index([email])
+  @@map("foldx_abandoned_cart")
 }
