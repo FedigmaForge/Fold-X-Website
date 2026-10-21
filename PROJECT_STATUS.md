@@ -1,16 +1,13 @@
 # FoldX — Project Status & Developer Guide
 
-_Last updated: 15 October 2026_
+_Last updated: 21 October 2026_
 
 FoldX is an online store for handcrafted leather goods (India, INR, GST). It is a
 **React storefront + admin dashboard** talking to an **Express + Prisma API**.
 This document is the starting point for any developer picking the project up:
 what exists, how it fits together, how to run it, and what is still to do.
 
-> ⚠️ **Most of the work below is not committed yet.** The last commit is
-> `7b030ad` (17 Sep 2026). Everything from "Order management" onwards — 7
-> database migrations and ~115 files — is only in the working tree. Commit
-> before doing anything else.
+> All work up to 21 Oct 2026 is committed (`d2fd28d`), including all 14 database migrations.
 
 ---
 
@@ -115,7 +112,7 @@ FoldX/
 ├── backend/
 │   ├── prisma/
 │   │   ├── schema.prisma
-│   │   ├── migrations/           # 11 migrations
+│   │   ├── migrations/           # 14 migrations
 │   │   ├── seed.js, seedData.js  # seeding (idempotent "ensure*" helpers)
 │   │   ├── defaultPages.js       # About/FAQ starter pages
 │   │   └── policyPages.js        # Shipping/Returns/Privacy/Terms texts
@@ -152,7 +149,10 @@ FoldX/
 
 | Area | Notes |
 |---|---|
-| Design | Brown/cream/gold luxury theme, Cormorant serif headings. Homepage banners, category tiles, editorial block, navbar mega-menu and footer are all **editable in admin** (`SiteContent`) |
+| Design | FoldX sells **bags only**. Layout copies damilano.com: rust announcement bar; header ("+ Contact Us" · logo · search/account/wishlist/bag/☰) floats transparent over the homepage slideshow and turns solid on scroll; all navigation in the ☰ drawer. Homepage sections in Da Milano order: slideshow → shop by category (3-col) → gift store strip → for her / for him → made for every moment → featured collection (image + product carousel) → trending now (category tiles) → your next stop → join the community; light footer. Every section is **editable in admin → Storefront** (`SiteContent`) |
+| Category pages | Da Milano-style banner on every listing page (slanted photo + uppercase title, subtitle, bag count), breadcrumb, and round "shop by type" thumbnails for the category's bag types. Banners are per listing link in admin → Storefront → Category banners; the most specific match wins (type > category, `/products` = fallback) — `src/utils/categoryBanner.js` |
+| Collections & gifts | Named collections (`/collections`, `/collections/:id`; admin → Collections, or per product). Gift store at `/gifts` with `?for=her|him|sets` and `?under=` filters. "Special prices" = `/products?sale=1` (price below original price) |
+| Free customisation | Shoppers can have any bag made in another leather at no charge (product page → Customisation; explained at `/customisation`). Leathers, note and on/off in admin → Settings; per-product opt-out in the product form. The choice travels as `variant.leather` on the cart line and `OrderItem.variant` (validated in `lib/customisation.js`), and shows in the bag, checkout, confirmation, My Orders, admin order detail (highlighted) and the invoice. Staff see what to make on the **dashboard** ("Custom leather to make" queue = open orders, `GET /admin/orders?customised=open`) and can filter **Orders** by "Custom leather" (`?customised=1`) |
 | Catalogue | Category/subcategory/material/colour/price filters; `?type=` subcategory links; variant picker with per-variant stock; draft & scheduled products hidden; per-product SEO title/description |
 | Checkout | 3 steps (address → review → payment). Server-side pricing; Razorpay or COD; promo-code box; gift wrap; Indian state dropdown; saves the bag for abandoned-cart recovery |
 | My account | Orders with status timeline, courier & tracking, refunds, **return requests** (10-day window) |
@@ -202,7 +202,7 @@ Read these before changing checkout, stock or money code.
 
 ## 6. Data model
 
-23 Prisma models (`backend/prisma/schema.prisma`):
+25 Prisma models (`backend/prisma/schema.prisma`):
 
 | Group | Models |
 |---|---|
@@ -210,10 +210,10 @@ Read these before changing checkout, stock or money code.
 | Orders | `Order`, `OrderItem`, `OrderEvent` (timeline), `ReturnRequest` |
 | Money | `PaymentTransaction` (payment log), `SettlementImport`, `Coupon`, `CouponRedemption` |
 | Customers | `User` (customers + staff), `CustomerProfile`, `AbandonedCart`, `ContactMessage` |
-| Content | `Banner`, `SiteContent` (menu/homepage/footer JSON), `Page` |
+| Content | `Banner`, `SiteContent` (menu/announcements/homepage sections/gift store/footer JSON), `Page`, `Collection`, `NewsletterSubscriber` |
 | Admin | `Settings` (single row, id 1), `AuditLog`, `StaffLogin` |
 
-**Migrations** (in order): `init` → `add_user_isactive` → `add_gift_wrap` → `add_staff_roles_and_audit_log` → *(not committed from here)* `order_management` → `stock_and_gst` → `site_content` → `variants_content_support` → `coupons` → `customers_and_cod` → `finance_2fa_carts`.
+**Migrations** (in order): `init` → `add_user_isactive` → `add_gift_wrap` → `add_staff_roles_and_audit_log` → `order_management` → `stock_and_gst` → `site_content` → `variants_content_support` → `coupons` → `customers_and_cod` → `finance_2fa_carts` → `collections_newsletter` → `free_customisation` → `custom_leathers_text` (the second fixes a JSON default SQLite can't store — leathers are a comma-separated string).
 
 Moving to Postgres: change `provider` in `schema.prisma` and `DATABASE_URL`, then create a fresh migration baseline. Some code relies on SQLite's case-insensitive `LIKE` for `contains` and then re-checks exact matches in JS — that still works on Postgres but could use `mode: 'insensitive'` there.
 
@@ -227,8 +227,8 @@ Moving to Postgres: change `provider` in `schema.prisma` and `DATABASE_URL`, the
 |---|---|
 | Gmail **App Password** for `foldx01@gmail.com` | `backend/.env` → `SMTP_PASS` |
 | **Razorpay live keys** | `backend/.env` |
-| Fill in the policy pages (legal name, GSTIN, grievance officer, dates) + legal review, then publish | Admin → Pages, or `docs/FoldX-Store-Policies-DRAFT.docx` |
-| GSTIN & store state; confirm GST rate/HSN (18% / 4202) with a CA | Admin → Settings |
+| Policy pages: legal name, GSTIN and phone are filled in (21 Oct 2026); still need the **Grievance Officer's name** and the "last updated" date, a legal review, then publish | Admin → Pages, or `docs/FoldX-Store-Policies-DRAFT.docx` |
+| ~~GSTIN & store state~~ done — 07BGJPK9798M1Z9, Delhi. The site, invoices and policies show only **FoldX** + address + GSTIN; the registered legal/trade names are kept in Settings for records only (not in the public `/api/settings`). Still: confirm GST rate/HSN (18% / 4202) with a CA | Admin → Settings |
 | Cost price per product; shipping cost per order | Products / Settings |
 | Turn on 2FA, then replace the demo staff accounts | Admin → My account / Staff |
 
@@ -237,7 +237,7 @@ Moving to Postgres: change `provider` in `schema.prisma` and `DATABASE_URL`, the
 1. **Customer emails** (next). Order confirmation, COD "we'll call you", shipped + tracking, delivered, refund, return approved/rejected, password reset (doesn't exist yet), automatic abandoned-cart reminders, new-order alert to the owner. Plan: `nodemailer` with the SMTP vars above, a `lib/mailer.js` that logs to the console when `SMTP_PASS` is blank, simple branded HTML templates, and sends triggered from the existing order/return/cart code paths.
 2. **Shipping integration** (Shiprocket or Delhivery). Book courier and print label from the order page, auto-fill tracking, webhook status updates, pincode serviceability check at checkout.
 3. **Saved addresses** on the customer account page (tab is a placeholder).
-4. **Newsletter signup** — the footer "Subscribe" box doesn't save anything.
+4. **Newsletter emails** — sign-ups are saved (admin → Subscribers, CSV export) but nothing is sent to them yet.
 5. **Tests.** There are none; checkout pricing, stock, discounts and refunds are the highest-value targets.
 
 ### Going live
@@ -260,6 +260,7 @@ Moving to Postgres: change `provider` in `schema.prisma` and `DATABASE_URL`, the
   ```
 - **`node --watch` restarts once right after start** on this machine — wait a few seconds before running API tests.
 - **Prisma `EPERM` on generate/migrate** while the backend runs (the query engine DLL is locked). Stop the backend first.
+- **New demo products:** add them to `mockProducts` in `src/data/mockData.js` and run `npm run seed` — `ensureDemoProducts` creates the missing ones (by id) without touching existing products.
 - **Seeding doesn't overwrite.** `seedAll()` upserts with empty updates; changing `mockData.js` won't change an existing DB — use reset-demo-data.
 - **Another project's Vite server** may also be on port 5173 (`127.0.0.1` vs FoldX on `[::1]`); `localhost:5173` can occasionally hit the wrong app.
 - **Sidebar badges** (pending orders, new messages, open returns) load once and don't refresh live.
@@ -280,6 +281,6 @@ Created by the seed. **Development only — weak passwords committed in code. Re
 | Support | `support@foldx.com` | `password123` |
 | Customer | `ananya.r@email.com` (and others in `src/data/mockData.js`) | `password123` |
 
-Demo content: 10 products (with colour variants), 6 categories, 3 banners, 5 orders (March 2024), the `FOLDX10` coupon, and 6 unpublished policy/content pages. The admin login form pre-fills the Super Admin credentials **only in dev builds**.
+Demo content: 26 bags across every subcategory (with colour variants; the 16 added on 21 Oct 2026 use logo-free photos and have no reviews), 4 categories (Women, Men, Travel, Gifts), 3 collections, 3 banners, 5 orders (March 2024), the `FOLDX10` coupon, and 6 unpublished policy/content pages. The admin login form pre-fills the Super Admin credentials **only in dev builds**.
 
 Store contact email: **foldx01@gmail.com** (also the planned sender for all outgoing mail).

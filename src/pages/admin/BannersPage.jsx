@@ -86,6 +86,7 @@ export default function BannersPage() {
           <h1 className="text-2xl font-bold text-gray-900">Banners</h1>
           <p className="text-sm text-gray-400 mt-0.5">
             {canEditCatalog ? 'Manage homepage carousel banners' : 'Homepage carousel banners · view only for your role'}
+            {' · '}If none is active, the homepage shows FoldX's built-in slides.
           </p>
         </div>
         {canEditCatalog && <button

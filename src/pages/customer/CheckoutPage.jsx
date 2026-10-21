@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { ChevronRight, ShieldCheck, Gift, Smartphone, CreditCard, Landmark, Wallet, Tag, X, Banknote } from 'lucide-react'
 import { formatCurrency } from '@/utils/formatCurrency'
+import { formatVariant } from '@/utils/formatVariant'
 import { initiatePayment } from '@/utils/razorpay'
 import { placeOrder, createRazorpayOrder, verifyPayment, getOrderQuote, saveCheckoutCart } from '@/services/api'
 import useCartStore from '@/store/cartStore'
@@ -265,8 +266,8 @@ export default function CheckoutPage() {
                     <img src={item.product.images[0]} alt={item.product.name} className="w-14 h-14 object-cover bg-cream-dark border border-border shrink-0" />
                     <div className="flex-1">
                       <p className="text-sm font-sans text-brown">{item.product.name}</p>
-                      {Object.keys(item.variant).length > 0 && (
-                        <p className="text-xs font-sans text-brown-mid">{Object.entries(item.variant).map(([k,v]) => `${k}: ${v}`).join(' · ')}</p>
+                      {formatVariant(item.variant).length > 0 && (
+                        <p className="text-xs font-sans text-brown-mid">{formatVariant(item.variant).join(' · ')}</p>
                       )}
                       <p className="text-sm font-sans text-brown-mid mt-0.5">Qty: {item.quantity}</p>
                     </div>

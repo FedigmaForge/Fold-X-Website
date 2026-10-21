@@ -10,8 +10,7 @@
  * authStore itself — authStore's login actions call into this file, so
  * importing it back here would create a circular module dependency.
  */
-// Empty string = same origin (production Docker build, where nginx proxies /api).
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
 function getStoredToken() {
   try {
@@ -137,9 +136,10 @@ export async function getStaffLogins() {
 
 // ─── Products ──────────────────────────────────────────────────────────────────
 
-export async function getProducts({ category, type, search, sort, minPrice, maxPrice } = {}) {
-  // GET /api/products — `type` is a subcategory slug, e.g. "tote-bags"
-  return request(`/products${qs({ category, type, search, sort, minPrice, maxPrice })}`)
+export async function getProducts({ category, type, collection, sale, search, sort, minPrice, maxPrice } = {}) {
+  // GET /api/products — `type` is a subcategory slug, e.g. "tote-bags";
+  // `collection` a collection id; `sale` = only items below their original price
+  return request(`/products${qs({ category, type, collection, sale, search, sort, minPrice, maxPrice })}`)
 }
 
 export async function getLowStock() {
@@ -224,6 +224,65 @@ export async function reorderCategories(ids) {
   return request('/admin/categories/reorder', { method: 'PUT', body: { ids } })
 }
 
+// ─── Collections ───────────────────────────────────────────────────────────────
+
+export async function getCollections() {
+  // GET /api/collections — storefront: active only, in display order, with counts
+  return request('/collections')
+}
+
+export async function getCollection(id) {
+  // GET /api/collections/:id → { ...collection, products } or null when hidden/missing
+  return request(`/collections/${encodeURIComponent(id)}`)
+}
+
+export async function getAdminCollections() {
+  // GET /api/admin/collections — incl. hidden, with product counts
+  return request('/admin/collections')
+}
+
+export async function createCollection(data) {
+  // POST /api/admin/collections  { id, name, tagline, description, image, cardImage, isActive }
+  return request('/admin/collections', { method: 'POST', body: data })
+}
+
+export async function updateCollection(id, data) {
+  // PUT /api/admin/collections/:id
+  return request(`/admin/collections/${encodeURIComponent(id)}`, { method: 'PUT', body: data })
+}
+
+export async function deleteCollection(id) {
+  // DELETE /api/admin/collections/:id — its products leave the collection
+  return request(`/admin/collections/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export async function reorderCollections(ids) {
+  // PUT /api/admin/collections/reorder  { ids }
+  return request('/admin/collections/reorder', { method: 'PUT', body: { ids } })
+}
+
+// ─── Newsletter ────────────────────────────────────────────────────────────────
+
+export async function subscribeNewsletter(email, website = '') {
+  // POST /api/newsletter  { email, website (honeypot) }
+  return request('/newsletter', { method: 'POST', body: { email, website } })
+}
+
+export async function getSubscribers() {
+  // GET /api/admin/newsletter
+  return request('/admin/newsletter')
+}
+
+export async function deleteSubscriber(id) {
+  // DELETE /api/admin/newsletter/:id
+  return request(`/admin/newsletter/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export async function exportSubscribersCsv() {
+  // GET /api/admin/newsletter/export.csv
+  return downloadFile('/admin/newsletter/export.csv', 'subscribers.csv')
+}
+
 // ─── Banners ───────────────────────────────────────────────────────────────────
 
 export async function getBanners() {
@@ -248,9 +307,9 @@ export async function deleteBanner(id) {
 
 // ─── Orders ────────────────────────────────────────────────────────────────────
 
-export async function getOrders({ status, paymentStatus, paymentMethod, q, from, to } = {}) {
-  // GET /api/admin/orders?status=&paymentStatus=&paymentMethod=online|cod|cod_unconfirmed&q=&from=&to=
-  return request(`/admin/orders${qs({ status, paymentStatus, paymentMethod, q, from, to })}`)
+export async function getOrders({ status, paymentStatus, paymentMethod, q, from, to, customised } = {}) {
+  // GET /api/admin/orders?status=&paymentStatus=&paymentMethod=online|cod|cod_unconfirmed&q=&from=&to=&customised=1|open
+  return request(`/admin/orders${qs({ status, paymentStatus, paymentMethod, q, from, to, customised })}`)
 }
 
 // Fetches an authenticated file and saves it. Done manually (not via
@@ -513,7 +572,7 @@ export async function uploadImage(file) {
 // ─── Storefront content (navbar menu, homepage tiles/editorial) ───────────────
 
 export async function getSiteContent() {
-  // GET /api/site-content → { navMenu?, homeTiles?, homeEditorial? } (only customised sections)
+  // GET /api/site-content → { navMenu?, homeTiles?, … } (only customised sections)
   return request('/site-content')
 }
 

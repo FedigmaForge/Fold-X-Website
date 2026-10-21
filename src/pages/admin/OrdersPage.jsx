@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Gift, Download, ChevronRight, X, Truck } from 'lucide-react'
+import { Search, Gift, Download, ChevronRight, X, Truck, Scissors } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/Badge'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate } from '@/utils/formatDate'
@@ -34,6 +34,8 @@ export default function OrdersPage() {
   const [paymentStatus, setPaymentStatus] = useState('all')
   // ?method=cod_unconfirmed deep-links straight to COD orders awaiting confirmation
   const [paymentMethod, setPaymentMethod] = useState(() => new URLSearchParams(window.location.search).get('method') || 'all')
+  // ?customised=1 deep-links to orders with a free leather change
+  const [customised, setCustomised] = useState(() => new URLSearchParams(window.location.search).get('customised') === '1')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [from, setFrom] = useState('')
@@ -44,7 +46,7 @@ export default function OrdersPage() {
     return () => clearTimeout(t)
   }, [search])
 
-  const filters = { status: activeTab, paymentStatus, paymentMethod, q: debouncedSearch, from, to }
+  const filters = { status: activeTab, paymentStatus, paymentMethod, q: debouncedSearch, from, to, customised: customised ? '1' : '' }
   const filterKey = JSON.stringify(filters)
   const loading = result.key !== filterKey
   const orders = result.orders
@@ -57,8 +59,8 @@ export default function OrdersPage() {
     return () => { stale = true }
   }, [filterKey])
 
-  const hasExtraFilters = paymentStatus !== 'all' || paymentMethod !== 'all' || search || from || to
-  const clearFilters = () => { setPaymentStatus('all'); setPaymentMethod('all'); setSearch(''); setFrom(''); setTo('') }
+  const hasExtraFilters = paymentStatus !== 'all' || paymentMethod !== 'all' || customised || search || from || to
+  const clearFilters = () => { setPaymentStatus('all'); setPaymentMethod('all'); setCustomised(false); setSearch(''); setFrom(''); setTo('') }
 
   const handleExport = async () => {
     setExporting(true)
@@ -125,6 +127,14 @@ export default function OrdersPage() {
         >
           {PAYMENT_FILTERS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
         </select>
+        <button
+          type="button"
+          onClick={() => setCustomised((c) => !c)}
+          aria-pressed={customised}
+          className={`inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm border transition-colors ${customised ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-gray-200 bg-white text-gray-600 hover:border-violet-400'}`}
+        >
+          <Scissors size={14} /> Custom leather
+        </button>
         <div className="flex items-center gap-1.5 text-sm text-gray-400">
           <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} aria-label="From date" className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 outline-none focus:border-violet-400" />
           <span>to</span>
@@ -175,7 +185,14 @@ export default function OrdersPage() {
                     <p className="font-medium text-gray-800">{o.customerName}</p>
                     <p className="text-xs text-gray-400">{o.customerEmail}</p>
                   </td>
-                  <td className="px-5 py-4 text-gray-500">{o.items.reduce((s, i) => s + i.quantity, 0)} items</td>
+                  <td className="px-5 py-4 text-gray-500">
+                    {o.items.reduce((s, i) => s + i.quantity, 0)} items
+                    {o.items.some((i) => i.variant?.leather) && (
+                      <span className="block mt-0.5 text-xs text-amber-700" title={o.items.filter((i) => i.variant?.leather).map((i) => `${i.product?.name} → ${i.variant.leather}`).join(', ')}>
+                        Custom leather
+                      </span>
+                    )}
+                  </td>
                   <td className="px-5 py-4 font-semibold text-gray-900">{formatCurrency(o.total)}</td>
                   <td className="px-5 py-4">
                     <StatusBadge status={o.paymentStatus} />

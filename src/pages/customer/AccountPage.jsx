@@ -7,6 +7,7 @@ import { getMyOrders } from '@/services/api'
 import useAuthStore from '@/store/authStore'
 import OrderTimeline from '@/components/customer/OrderTimeline'
 import ReturnRequestModal from '@/components/customer/ReturnRequestModal'
+import { customisedItems } from '@/utils/formatVariant'
 import toast from 'react-hot-toast'
 
 // Shown instead of the account dashboard when the customer isn't signed in —
@@ -172,6 +173,11 @@ export default function AccountPage() {
                     <div className="w-12 h-12 bg-cream-dark flex items-center justify-center text-xs font-sans text-brown-mid">+{order.items.length - 3}</div>
                   )}
                 </div>
+                {customisedItems(order.items).map((i) => (
+                  <p key={i.id} className="mb-2 text-xs font-sans text-brown-mid">
+                    Custom leather: <span className="text-brown">{i.variant.leather}</span> for {i.product.name}
+                  </p>
+                ))}
                 <div className="mb-3 max-w-[220px]">
                   <OrderTimeline status={order.status} compact />
                 </div>

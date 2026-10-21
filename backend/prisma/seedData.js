@@ -14,6 +14,33 @@ async function loadMockData() {
   return import(pathToFileURL(mockDataPath).href)
 }
 
+// Product row from a mockData entry (shared by the full seed and ensureDemoProducts)
+function productData(p) {
+  return {
+    id: p.id,
+    name: p.name,
+    slug: p.slug,
+    category: p.category,
+    categoryId: p.categoryId,
+    subcategory: p.subcategory,
+    material: p.material,
+    price: p.price,
+    originalPrice: p.originalPrice,
+    discount: p.discount ?? 0,
+    rating: p.rating ?? 0,
+    reviewCount: p.reviewCount ?? 0,
+    stock: p.stock ?? 0,
+    badge: p.badge,
+    colors: p.colors ?? [],
+    images: p.images ?? [],
+    description: p.description ?? '',
+    features: p.features ?? [],
+    isFeatured: p.isFeatured ?? false,
+    isActive: p.isActive ?? true,
+    createdAt: new Date(p.createdAt),
+  }
+}
+
 async function seedAll(prisma) {
   const { categories, mockProducts, mockBanners, mockReviews, mockCustomers, mockOrders } =
     await loadMockData()
@@ -66,35 +93,8 @@ async function seedAll(prisma) {
     })
   }
 
-  for (const p of mockProducts) {
-    await prisma.product.upsert({
-      where: { id: p.id },
-      update: {},
-      create: {
-        id: p.id,
-        name: p.name,
-        slug: p.slug,
-        category: p.category,
-        categoryId: p.categoryId,
-        subcategory: p.subcategory,
-        material: p.material,
-        price: p.price,
-        originalPrice: p.originalPrice,
-        discount: p.discount ?? 0,
-        rating: p.rating ?? 0,
-        reviewCount: p.reviewCount ?? 0,
-        stock: p.stock ?? 0,
-        badge: p.badge,
-        colors: p.colors ?? [],
-        images: p.images ?? [],
-        description: p.description ?? '',
-        features: p.features ?? [],
-        isFeatured: p.isFeatured ?? false,
-        isActive: p.isActive ?? true,
-        createdAt: new Date(p.createdAt),
-      },
-    })
-  }
+  // Creates products the database doesn't have yet; never edits existing ones
+  await ensureDemoProducts(prisma)
 
   for (const b of mockBanners) {
     await prisma.banner.upsert({
@@ -174,9 +174,15 @@ async function seedAll(prisma) {
       announcementBar: 'Free shipping on orders above ₹999 · Use code FOLDX10 for 10% off · Handcrafted in India',
       freeShippingThreshold: 999,
       supportEmail: 'foldx01@gmail.com',
-      supportPhone: '1800-001-234',
+      supportPhone: '9990537773',
       address: '42 MG Road, Bangalore, Karnataka — 560001',
-      instagramHandle: '@foldx.in',
+      instagramHandle: '@foldx01',
+      // Registered business details (GST certificate)
+      gstin: '07BGJPK9798M1Z9',
+      state: 'Delhi',
+      legalName: 'NITIN KAPOOR',
+      tradeName: 'M/s KAPSONS ENTERPRISES',
+      businessType: 'Proprietorship',
       currency: 'INR',
       razorpayKeyId: '',
     },
@@ -185,6 +191,7 @@ async function seedAll(prisma) {
   await ensureVariantsFromColors(prisma)
   await ensureDefaultPages(prisma)
   await ensureDefaultCoupons(prisma)
+  await ensureDefaultCollections(prisma)
 
   return { adminEmail: ADMIN_EMAIL, adminPassword: ADMIN_PASSWORD, demoCustomerEmail: mockCustomers[0].email, demoPassword: DEMO_PASSWORD }
 }
@@ -236,6 +243,62 @@ async function ensureDefaultCoupons(prisma) {
   return 1
 }
 
+// Starter collections, created only when there are none yet (so an admin who
+// deleted them all doesn't get them back on every seed). Products are assigned
+// by id and skipped if they no longer exist.
+const DEFAULT_COLLECTIONS = [
+  {
+    id: 'heritage', name: 'The Heritage Collection', tagline: 'Structured classics, cut from a single hide',
+    description: 'Clean lines, hand-burnished edges and full-grain leather that deepens with every year of use. The Heritage pieces are designed to be carried daily — and handed down.',
+    image: 'https://images.unsplash.com/photo-1778883008356-f7b3789a3073?w=1600&q=85',
+    cardImage: 'https://images.unsplash.com/photo-1598532163257-ae3c6b2524b6?w=800&q=85',
+    productIds: ['prod_001', 'prod_004', 'prod_005', 'prod_008', 'prod_012', 'prod_016', 'prod_017', 'prod_020'],
+  },
+  {
+    id: 'croco', name: 'The Croco Edit', tagline: 'Embossed texture, evening polish',
+    description: 'Croc-embossed leather in compact silhouettes — the slings, clutches and card holders that finish an outfit.',
+    image: 'https://images.unsplash.com/photo-1567744875520-cf9c27fbb53b?w=1600&q=85',
+    cardImage: 'https://images.unsplash.com/photo-1566150905458-1bf1fc113f0d?w=800&q=85',
+    productIds: ['prod_002', 'prod_003', 'prod_007', 'prod_011', 'prod_014', 'prod_021'],
+  },
+  {
+    id: 'voyage', name: 'Voyage', tagline: 'Leather made for the journey',
+    description: 'Passport holders, long wallets and travel essentials built to keep documents, cards and currency in order from check-in to arrival.',
+    image: 'https://images.unsplash.com/photo-1586441133374-ed1cb4007a47?w=1600&q=85',
+    cardImage: 'https://images.unsplash.com/photo-1757074757417-277a22105bc0?w=800&q=85',
+    productIds: ['prod_006', 'prod_009', 'prod_010', 'prod_022', 'prod_023', 'prod_024', 'prod_025', 'prod_026'],
+  },
+]
+
+async function ensureDefaultCollections(prisma) {
+  if (await prisma.collection.count()) return 0
+  for (const [i, { productIds, ...c }] of DEFAULT_COLLECTIONS.entries()) {
+    await prisma.collection.create({ data: { ...c, sortOrder: i } })
+    await prisma.product.updateMany({ where: { id: { in: productIds }, collectionId: null }, data: { collectionId: c.id } })
+  }
+  return DEFAULT_COLLECTIONS.length
+}
+
+// Adds any mockData product the database doesn't have yet (by id) — so demo
+// products added to mockData reach an existing database without a reset — then
+// gives them colour variants and puts them in their default collection.
+// Never changes products that already exist.
+async function ensureDemoProducts(prisma) {
+  const { mockProducts } = await loadMockData()
+  const existing = new Set((await prisma.product.findMany({ select: { id: true } })).map((p) => p.id))
+  const slugs = new Set((await prisma.product.findMany({ select: { slug: true } })).map((p) => p.slug))
+  const missing = mockProducts.filter((p) => !existing.has(p.id) && !slugs.has(p.slug))
+  for (const p of missing) await prisma.product.create({ data: productData(p) })
+  await ensureVariantsFromColors(prisma)
+  const added = new Set(missing.map((p) => p.id))
+  for (const c of DEFAULT_COLLECTIONS) {
+    if (!(await prisma.collection.findUnique({ where: { id: c.id } }))) continue
+    const ids = c.productIds.filter((id) => added.has(id))
+    if (ids.length) await prisma.product.updateMany({ where: { id: { in: ids }, collectionId: null }, data: { collectionId: c.id } })
+  }
+  return missing.length
+}
+
 // Wipes everything the demo seeds (in FK-safe order) — used by the admin
 // "Reset to Demo Data" button. Keeps any customer accounts/orders/reviews a
 // real user created after seeding, EXCEPT this is a full reset so it removes
@@ -246,6 +309,8 @@ async function wipeAll(prisma) {
   await prisma.coupon.deleteMany()
   await prisma.review.deleteMany()
   await prisma.product.deleteMany()
+  await prisma.collection.deleteMany()
+  await prisma.newsletterSubscriber.deleteMany()
   await prisma.category.deleteMany()
   await prisma.banner.deleteMany()
   await prisma.auditLog.deleteMany()
@@ -256,4 +321,4 @@ async function wipeAll(prisma) {
   await prisma.settings.deleteMany()
 }
 
-module.exports = { seedAll, wipeAll, loadMockData, ensureVariantsFromColors, ensureDefaultPages, ensureDefaultCoupons }
+module.exports = { seedAll, wipeAll, loadMockData, ensureVariantsFromColors, ensureDefaultPages, ensureDefaultCoupons, ensureDefaultCollections, ensureDemoProducts }

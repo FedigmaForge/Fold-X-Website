@@ -41,9 +41,42 @@ function list(value, field, max) {
   return value
 }
 
+// Optional link: blank stays blank
+function optionalLink(value, field) {
+  return value && String(value).trim() ? link(value, field) : ''
+}
+
+// Image + title + link tiles (category tiles, gifting banners, "moments" cards)
+function tiles(v, field, max) {
+  return list(v, field, max).map((tile, i) => {
+    const n = `${field} ${i + 1}`
+    return {
+      label: text(tile?.label, `${n} title`, { max: 40 }),
+      sub: text(tile?.sub, `${n} subtitle`, { max: 60, required: false }),
+      href: link(tile?.href, `${n} link`),
+      image: image(tile?.image, `${n} image`),
+    }
+  })
+}
+
+// Image-led banner with copy and a button (editorial, closing banner)
+function bannerBlock(v) {
+  return {
+    image: image(v?.image, 'Image'),
+    eyebrow: text(v?.eyebrow, 'Small heading', { max: 60, required: false }),
+    title: text(v?.title, 'Title', { max: 80 }),
+    body: text(v?.body, 'Body text', { max: 600, required: false }),
+    ctaLabel: text(v?.ctaLabel, 'Button text', { max: 40 }),
+    ctaHref: link(v?.ctaHref, 'Button link'),
+  }
+}
+
 const VALIDATORS = {
-  navMenu: (v) => list(v, 'Menu', 8).map((item, i) => {
+  navMenu: (v) => list(v, 'Menu', 10).map((item, i) => {
     const n = `Menu item ${i + 1}`
+    // The featured image is optional; when it's blank the menu drops down
+    // with links only (or not at all, if there are no sub-links either)
+    const hasFeatured = !!String(item?.featured?.image ?? '').trim()
     return {
       label: text(item?.label, `${n} label`, { max: 30 }),
       href: link(item?.href, `${n} link`),
@@ -51,22 +84,59 @@ const VALIDATORS = {
         label: text(s?.label, `${n} sub-link ${j + 1} label`, { max: 40 }),
         href: link(s?.href, `${n} sub-link ${j + 1} link`),
       })),
-      featured: {
-        image: image(item?.featured?.image, `${n} featured image`),
-        label: text(item?.featured?.label, `${n} featured caption`, { max: 40 }),
-        href: link(item?.featured?.href, `${n} featured link`),
-      },
+      featured: hasFeatured
+        ? {
+            image: image(item.featured.image, `${n} featured image`),
+            label: text(item.featured.label, `${n} featured caption`, { max: 40 }),
+            href: link(item.featured.href, `${n} featured link`),
+          }
+        : { image: '', label: '', href: '' },
     }
   }),
 
-  homeTiles: (v) => list(v, 'Category tiles', 8).map((tile, i) => {
-    const n = `Tile ${i + 1}`
+  announcements: (v) => list(v, 'Announcements', 6).map((a, i) => ({
+    text: text(a?.text, `Announcement ${i + 1}`, { max: 120 }),
+    href: optionalLink(a?.href, `Announcement ${i + 1} link`),
+  })),
+
+  homeTiles: (v) => tiles(v, 'Tile', 8),
+
+  homeGifting: (v) => tiles(v, 'Gifting banner', 3),
+
+  homeMoments: (v) => ({
+    title: text(v?.title, 'Section title', { max: 60 }),
+    items: tiles(v?.items ?? [], 'Card', 6),
+  }),
+
+  homeClosing: bannerBlock,
+
+  homeTrending: (v) => tiles(v, 'Trending tile', 8),
+
+  homeCommunity: (v) => ({
+    title: text(v?.title, 'Section title', { max: 60 }),
+    intro: text(v?.intro, 'Intro text', { max: 240, required: false }),
+    handle: text(v?.handle, 'Handle', { max: 40, required: false }),
+    href: optionalLink(v?.href, 'Profile link'),
+    images: list(v?.images ?? [], 'Photos', 12).map((u, i) => image(u, `Photo ${i + 1}`)),
+  }),
+
+  categoryBanners: (v) => list(v, 'Category banners', 40).map((b, i) => {
+    const n = `Banner ${i + 1}`
+    const href = link(b?.link, `${n} page link`)
+    if (!href.startsWith('/products')) throw new HttpError(400, `${n} page link must be a /products… listing link`)
     return {
-      label: text(tile?.label, `${n} title`, { max: 30 }),
-      sub: text(tile?.sub, `${n} subtitle`, { max: 40, required: false }),
-      href: link(tile?.href, `${n} link`),
-      image: image(tile?.image, `${n} image`),
+      link: href,
+      title: text(b?.title, `${n} title`, { max: 40 }),
+      sub: text(b?.sub, `${n} subtitle`, { max: 80, required: false }),
+      image: image(b?.image, `${n} image`),
     }
+  }),
+
+  giftStore: (v) => ({
+    image: image(v?.image, 'Hero image'),
+    eyebrow: text(v?.eyebrow, 'Small heading', { max: 60, required: false }),
+    title: text(v?.title, 'Title', { max: 80 }),
+    body: text(v?.body, 'Intro text', { max: 600, required: false }),
   }),
 
   footer: (v) => ({
@@ -83,17 +153,23 @@ const VALIDATORS = {
     })),
   }),
 
-  homeEditorial: (v) => ({
-    image: image(v?.image, 'Image'),
-    eyebrow: text(v?.eyebrow, 'Small heading', { max: 60, required: false }),
-    title: text(v?.title, 'Title', { max: 80 }),
-    body: text(v?.body, 'Body text', { max: 600 }),
-    ctaLabel: text(v?.ctaLabel, 'Button text', { max: 40 }),
-    ctaHref: link(v?.ctaHref, 'Button link'),
-  }),
+  homeEditorial: bannerBlock,
 }
 
-const LABELS = { navMenu: 'navbar menu', homeTiles: 'homepage category tiles', homeEditorial: 'homepage editorial', footer: 'footer' }
+const LABELS = {
+  navMenu: 'navbar menu',
+  announcements: 'announcement bar',
+  homeTiles: 'homepage category tiles',
+  homeGifting: 'homepage gifting banners',
+  homeMoments: 'homepage "moments" cards',
+  homeEditorial: 'homepage featured collection',
+  homeClosing: 'homepage "your next stop" banner',
+  homeTrending: 'homepage trending tiles',
+  homeCommunity: 'homepage community photos',
+  categoryBanners: 'category page banners',
+  giftStore: 'gift store page',
+  footer: 'footer',
+}
 
 function checkKey(key) {
   if (!VALIDATORS[key]) throw new HttpError(404, 'Unknown content section')

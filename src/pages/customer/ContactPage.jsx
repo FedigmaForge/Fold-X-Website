@@ -10,7 +10,7 @@ import toast from 'react-hot-toast'
 const SUBJECTS = ['Order question', 'Returns & refunds', 'Product question', 'Feedback', 'Other']
 
 export default function ContactPage() {
-  const { storeName, supportEmail, supportPhone, address } = useSettingsStore()
+  const { storeName, supportEmail, supportPhone, address, gstin } = useSettingsStore()
   const user = useAuthStore((s) => s.user)
   const [form, setForm] = useState({
     name: user?.name ?? '', email: user?.email ?? '', phone: '', orderId: '', subject: SUBJECTS[0], message: '', website: '',
@@ -96,6 +96,7 @@ export default function ContactPage() {
             <a href={`tel:${supportPhone.replace(/[^\d+]/g, '')}`} className="flex items-start gap-3 hover:text-brown"><Phone size={16} strokeWidth={1.5} className="mt-0.5 shrink-0" /> {supportPhone}</a>
           )}
           {address && <p className="flex items-start gap-3"><MapPin size={16} strokeWidth={1.5} className="mt-0.5 shrink-0" /> {address}</p>}
+          {gstin && <p className="pl-7 text-xs tracking-wide">GSTIN: {gstin}</p>}
         </aside>
       </div>
     </div>

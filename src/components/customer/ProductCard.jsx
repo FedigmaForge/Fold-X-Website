@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Heart } from 'lucide-react'
 import { formatCurrency } from '@/utils/formatCurrency'
-import StarRating from '@/components/ui/StarRating'
 import useCartStore from '@/store/cartStore'
 import useWishlistStore from '@/store/wishlistStore'
 import toast from 'react-hot-toast'
@@ -111,14 +110,8 @@ export default function ProductCard({ product }) {
           {/* Name */}
           <h3 className="font-serif text-base text-brown leading-snug line-clamp-2">{product.name}</h3>
 
-          {/* Stars + count */}
-          <div className="flex items-center gap-1.5 mt-1.5 mb-2">
-            <StarRating rating={product.rating} size={11} />
-            <span className="text-[10px] font-sans text-brown-mid">({product.reviewCount})</span>
-          </div>
-
-          {/* Price */}
-          <div className="flex items-center gap-2">
+          {/* Price — name and price only, ratings live on the product page */}
+          <div className="flex items-center gap-2 mt-1.5">
             <span className="font-sans text-sm text-brown font-light">{formatCurrency(product.price)}</span>
             {product.originalPrice > product.price && (
               <span className="text-[11px] font-sans text-brown-mid line-through">{formatCurrency(product.originalPrice)}</span>

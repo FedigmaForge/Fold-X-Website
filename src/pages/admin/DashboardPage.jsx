@@ -9,6 +9,8 @@ import SalesChart from '@/components/admin/SalesChart'
 import RecentOrdersTable from '@/components/admin/RecentOrdersTable'
 import LowStockCard from '@/components/admin/LowStockCard'
 import CodToConfirmCard from '@/components/admin/CodToConfirmCard'
+import CustomisationQueueCard from '@/components/admin/CustomisationQueueCard'
+import SubscribersSummaryCard from '@/components/admin/SubscribersSummaryCard'
 import { getAnalytics, getOrders, getAllBanners, saveBanner, deleteBanner, uploadImage, resetDemoData } from '@/services/api'
 import { formatNumber } from '@/utils/formatCurrency'
 import toast from 'react-hot-toast'
@@ -486,7 +488,9 @@ export default function DashboardPage() {
       </div>
 
       <CodToConfirmCard />
+      <CustomisationQueueCard />
       <LowStockCard />
+      <SubscribersSummaryCard />
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

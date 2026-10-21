@@ -3,6 +3,7 @@ const { isProductVisible } = require('./visibility')
 const { variantLabel } = require('./stock')
 const { chooseDiscount } = require('./discounts')
 const { codEligibility } = require('./customers')
+const { resolveLeather } = require('./customisation')
 
 const MAX_QTY_PER_LINE = 20
 const round2 = (n) => Math.round(n * 100) / 100
@@ -18,20 +19,21 @@ function displayOnlyVariant(v) {
 }
 
 async function getSettings(db) {
-  return (await db.settings.findUnique({ where: { id: 1 } })) ?? { freeShippingThreshold: 999, flatShippingFee: 99, giftWrapFee: 149, codEnabled: false, codFee: 0, codMaxOrder: 0, codMaxRefusals: 2, codMaxOpen: 2 }
+  return (await db.settings.findUnique({ where: { id: 1 } })) ?? { freeShippingThreshold: 999, flatShippingFee: 99, giftWrapFee: 149, codEnabled: false, codFee: 0, codMaxOrder: 0, codMaxRefusals: 2, codMaxOpen: 2, customisationEnabled: false, customLeathers: '' }
 }
 
 // Works out an order entirely from the database. The client only says WHAT it
 // wants (product, variant, quantity, gift wrap) — prices, fees and totals sent
 // by the browser are ignored, so they can't be tampered with.
 //
-// items: [{ product: { id }, quantity, variantId?, variant?: { color, size } }]
+// items: [{ product: { id }, quantity, variantId?, variant?: { color, size, leather } }]
 // (variant colour/size is accepted as a fallback for carts saved before
 // variant ids existed)
 async function quoteOrder(db, { items, giftWrap = false, couponCode = null, email = null, paymentMethod = 'online' }) {
   if (!Array.isArray(items) || items.length === 0) throw new HttpError(400, 'Your bag is empty')
   if (items.length > 50) throw new HttpError(400, 'Too many items in one order')
 
+  const settings = await getSettings(db)
   const lines = []
   for (const item of items) {
     const productId = item?.product?.id ?? item?.productId
@@ -52,6 +54,8 @@ async function quoteOrder(db, { items, giftWrap = false, couponCode = null, emai
         : product.variants.find((v) => v.color === (wanted.color ?? '') && v.size === (wanted.size ?? ''))
       if (!variant) throw new HttpError(409, `Please choose an available option for ${product.name}`)
     }
+    // Free leather change — no effect on price or stock, but the workshop needs it
+    const leather = resolveLeather(item.variant?.leather, { product, settings })
 
     lines.push({
       productId: product.id,
@@ -59,9 +63,12 @@ async function quoteOrder(db, { items, giftWrap = false, couponCode = null, emai
       variantId: variant?.id ?? null,
       quantity,
       unitPrice: product.price,
-      variantDisplay: variant
-        ? { ...(variant.color && { color: variant.color }), ...(variant.size && { size: variant.size }) }
-        : displayOnlyVariant(item.variant),
+      variantDisplay: {
+        ...(variant
+          ? { ...(variant.color && { color: variant.color }), ...(variant.size && { size: variant.size }) }
+          : displayOnlyVariant(item.variant)),
+        ...(leather && { leather }),
+      },
       // Frozen copy for the order: what was bought, at what price and tax class
       snapshot: {
         id: product.id,
@@ -75,12 +82,12 @@ async function quoteOrder(db, { items, giftWrap = false, couponCode = null, emai
         gstRate: product.gstRate,
         sku: variant?.sku ?? product.sku ?? null,
         variant: variant ? variantLabel(variant) : null,
+        customLeather: leather, // free customisation; null = standard leather
         costPrice: product.costPrice ?? null, // for the profit view; stripped from customer-facing responses
       },
     })
   }
 
-  const settings = await getSettings(db)
   const subtotal = round2(lines.reduce((s, l) => s + l.unitPrice * l.quantity, 0))
   // Free-shipping threshold is judged on the subtotal before any discount
   let shipping = subtotal >= settings.freeShippingThreshold ? 0 : settings.flatShippingFee

@@ -11,9 +11,12 @@ const useCartStore = create(
       closeCart: () => set({ isOpen: false }),
 
       // variantId identifies the exact colour/size bought (its own stock);
-      // `variant` is the human-readable { color, size } shown in the bag.
+      // `variant` is the human-readable { color, size } shown in the bag, plus
+      // `leather` when the shopper chose the free leather customisation — the
+      // same bag in two leathers is two separate lines.
       addItem: (product, quantity = 1, variant = {}, variantId = null) => {
-        const key = `${product.id}-${variantId ?? JSON.stringify(variant)}`
+        const leather = variant.leather ? `~${variant.leather}` : ''
+        const key = variantId ? `${product.id}-${variantId}${leather}` : `${product.id}-${JSON.stringify(variant)}`
         set((state) => {
           const existing = state.items.find((i) => i.key === key)
           if (existing) {

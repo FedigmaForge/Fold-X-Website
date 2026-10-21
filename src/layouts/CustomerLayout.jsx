@@ -18,7 +18,7 @@ export default function CustomerLayout() {
       </main>
       <Footer />
       <Toaster
-        position="top-right"
+        position="bottom-center"
         toastOptions={{
           style: { borderRadius: '2px', fontSize: '13px', fontFamily: 'Jost, sans-serif', background: '#2C1810', color: '#FAF7F4' },
           success: { iconTheme: { primary: '#C9A84C', secondary: '#FAF7F4' } },

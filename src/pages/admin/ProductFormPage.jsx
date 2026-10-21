@@ -4,7 +4,7 @@ import { ChevronLeft, Plus, X } from 'lucide-react'
 import ImageUploader from '@/components/admin/ImageUploader'
 import VariantsEditor from '@/components/admin/VariantsEditor'
 import StockHistory from '@/components/admin/StockHistory'
-import { getProductById, createProduct, updateProduct, getAdminCategories } from '@/services/api'
+import { getProductById, createProduct, updateProduct, getAdminCategories, getAdminCollections } from '@/services/api'
 import toast from 'react-hot-toast'
 import { usePermissions } from '@/utils/permissions'
 
@@ -15,7 +15,7 @@ const emptyForm = {
   price: '', originalPrice: '',
   material: '', badge: '',
   description: '', stock: '',
-  subcategory: '', sku: '', lowStockThreshold: '5', costPrice: '',
+  subcategory: '', collectionId: '', sku: '', lowStockThreshold: '5', costPrice: '',
   variants: [],
   status: 'published', publishAt: '', // status: published | draft | scheduled
   metaTitle: '', metaDescription: '',
@@ -24,7 +24,7 @@ const emptyForm = {
   colors: [],
   features: [],
   images: [],
-  isActive: true, isFeatured: false,
+  isActive: true, isFeatured: false, allowCustomisation: true,
 }
 
 const toSlug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
@@ -51,6 +51,7 @@ export default function ProductFormPage() {
   const isEdit = Boolean(id)
   const [form, setForm] = useState(emptyForm)
   const [categories, setCategories] = useState([])
+  const [collections, setCollections] = useState([])
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [historyKey, setHistoryKey] = useState(0)
@@ -58,7 +59,10 @@ export default function ProductFormPage() {
   const { canEditCatalog } = usePermissions()
 
   // Admin list includes hidden categories, so products can still be filed under them
-  useEffect(() => { getAdminCategories().then(setCategories).catch(() => {}) }, [])
+  useEffect(() => {
+    getAdminCategories().then(setCategories).catch(() => {})
+    getAdminCollections().then(setCollections).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (isEdit) {
@@ -79,6 +83,7 @@ export default function ProductFormPage() {
             hsnCode: p.hsnCode || '',
             gstRate: p.gstRate ?? '',
             subcategory: p.subcategory || '',
+            collectionId: p.collectionId || '',
             sku: p.sku || '',
             lowStockThreshold: String(p.lowStockThreshold ?? 5),
             costPrice: p.costPrice ?? '',
@@ -128,6 +133,7 @@ export default function ProductFormPage() {
       lowStockThreshold: Number(form.lowStockThreshold) || 0,
       costPrice: form.costPrice === '' ? null : Number(form.costPrice),
       subcategory: form.subcategory || null,
+      collectionId: form.collectionId || null,
       // With variants the server derives stock and colours from them
       ...(hasVariants
         ? { variants: form.variants.map((v) => ({ ...v, stock: Number(v.stock) || 0 })), stock: undefined, sku: null }
@@ -247,6 +253,13 @@ export default function ProductFormPage() {
                     placeholder="e.g. Full Grain Leather"
                     className={inputCls}
                   />
+                </div>
+                <div>
+                  <label className={labelCls}>Collection</label>
+                  <select value={form.collectionId} onChange={(e) => set('collectionId', e.target.value)} className={inputCls}>
+                    <option value="">— None —</option>
+                    {collections.map((c) => <option key={c.id} value={c.id}>{c.name}{c.isActive ? '' : ' (hidden)'}</option>)}
+                  </select>
                 </div>
               </div>
               <div>
@@ -438,6 +451,12 @@ export default function ProductFormPage() {
                 sub="Show on homepage"
                 value={form.isFeatured}
                 onChange={() => set('isFeatured', !form.isFeatured)}
+              />
+              <Toggle
+                label="Free customisation"
+                sub="Shoppers can pick another leather (Settings)"
+                value={form.allowCustomisation !== false}
+                onChange={() => set('allowCustomisation', form.allowCustomisation === false)}
               />
             </Card>
 

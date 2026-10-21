@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Save, RotateCcw, Download, Upload } from 'lucide-react'
 import useSettingsStore from '@/store/settingsStore'
-import { exportData, importData, resetDemoData } from '@/services/api'
+import { exportData, importData, resetDemoData, getAdminSettings } from '@/services/api'
 import { INDIAN_STATES } from '@/data/indianStates'
 import toast from 'react-hot-toast'
 import { usePermissions } from '@/utils/permissions'
@@ -33,16 +33,27 @@ const inputCls = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm o
 export default function SettingsPage() {
   const settings = useSettingsStore()
   const [form, setForm] = useState({ ...settings })
+  // The form is filled from the admin endpoint: the public settings leave out
+  // the Razorpay key and registered names, so saving before this loads would blank them
+  const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    getAdminSettings()
+      .then((full) => { setForm((f) => ({ ...f, ...full })); setLoaded(true) })
+      .catch((err) => toast.error(err.message || 'Could not load settings'))
+  }, [])
   const { canEditCatalog, isSuperAdmin } = usePermissions()
 
   const set = (field, value) => setForm((f) => ({ ...f, [field]: value }))
 
   const handleSave = async (e) => {
     e.preventDefault()
+    if (!loaded) return
     setSaving(true)
     try {
-      await settings.update(form)
+      const saved = await settings.update(form)
+      setForm((f) => ({ ...f, ...saved }))
       toast.success('Settings saved!')
     } catch (err) {
       toast.error(err.message || 'Failed to save settings')
@@ -120,7 +131,7 @@ export default function SettingsPage() {
               <input value={form.tagline} onChange={(e) => set('tagline', e.target.value)} className={inputCls} />
             </Field>
           </div>
-          <Field label="Announcement Bar Text" hint="Shown in the top bar on all pages. Separate items with ·">
+          <Field label="Announcement Bar Text" hint="Fallback only: the top bar shows the rotating messages from Storefront → Announcement bar, and this text only when that list is empty.">
             <input value={form.announcementBar} onChange={(e) => set('announcementBar', e.target.value)} className={inputCls} />
           </Field>
           <Field label="Instagram Handle">
@@ -142,8 +153,8 @@ export default function SettingsPage() {
             <input value={form.address} onChange={(e) => set('address', e.target.value)} className={inputCls} />
           </Field>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Legal Business Name" hint="Shown on invoices if it differs from the store name.">
-              <input value={form.legalName ?? ''} onChange={(e) => set('legalName', e.target.value)} className={inputCls} />
+            <Field label="Legal Name" hint="For your records only — the website and invoices show just the store name (FoldX).">
+              <input value={form.legalName ?? ''} onChange={(e) => set('legalName', e.target.value)} className={inputCls} placeholder="e.g. NITIN KAPOOR" />
             </Field>
             <Field label="GSTIN" hint="15-character GST number, printed on invoices.">
               <input
@@ -153,6 +164,17 @@ export default function SettingsPage() {
                 placeholder="22AAAAA0000A1Z5"
                 className={`${inputCls} font-mono`}
               />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Trade Name" hint="For your records only — not shown on the website or invoices.">
+              <input value={form.tradeName ?? ''} onChange={(e) => set('tradeName', e.target.value)} className={inputCls} placeholder="e.g. M/s KAPSONS ENTERPRISES" />
+            </Field>
+            <Field label="Constitution of Business" hint="For your records only.">
+              <select value={form.businessType ?? ''} onChange={(e) => set('businessType', e.target.value)} className={inputCls}>
+                <option value="">Not set</option>
+                {['Proprietorship', 'Partnership', 'Limited Liability Partnership', 'Private Limited Company', 'Public Limited Company', 'Hindu Undivided Family'].map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
             </Field>
           </div>
           <div className="grid grid-cols-3 gap-4">
@@ -201,6 +223,20 @@ export default function SettingsPage() {
           </div>
         </Section>
 
+        {/* Free customisation */}
+        <Section title="Free Customisation" desc="Shoppers can ask for any bag in a different leather at no extra charge. Their choice shows on the order, the invoice and in My Orders. Turn it off per product in the product form.">
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" checked={form.customisationEnabled ?? true} onChange={(e) => set('customisationEnabled', e.target.checked)} />
+            Offer free leather customisation on product pages
+          </label>
+          <Field label="Leathers offered" hint="Separate with commas, up to 12. The bag's own material is hidden from its list.">
+            <textarea rows={2} value={form.customLeathers ?? ''} onChange={(e) => set('customLeathers', e.target.value)} className={`${inputCls} resize-none`} />
+          </Field>
+          <Field label="Note shown when a leather is chosen" hint="E.g. the extra making time. Also shown on the order confirmation.">
+            <input value={form.customisationNote ?? ''} maxLength={200} onChange={(e) => set('customisationNote', e.target.value)} className={inputCls} />
+          </Field>
+        </Section>
+
         {/* Cash on delivery */}
         <Section title="Cash on Delivery" desc="Every COD order waits for staff to confirm it with the customer before it's packed.">
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
@@ -237,7 +273,7 @@ export default function SettingsPage() {
 
         {canEditCatalog && <button
           type="submit"
-          disabled={saving}
+          disabled={saving || !loaded}
           className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60"
         >
           <Save size={15} /> {saving ? 'Saving…' : 'Save Settings'}

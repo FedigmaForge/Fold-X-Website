@@ -10,6 +10,7 @@
   --color-gold-light:  #E8D5A3;
   --color-muted:       #8B7355;
   --color-border:      #E8DDD4;
+  --color-rust:        #6B2D1B; /* Da Milano-style mahogany: announcement bar, homepage headings */
   --font-serif: 'Cormorant Garamond', Georgia, serif;
   --font-sans:  'Jost', system-ui, sans-serif;
 }
@@ -106,8 +107,40 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-kenburns, .reveal, .route-fade { animation: none !important; transition: none !important; }
+  .hero-kenburns, .reveal, .route-fade, .menu-drop { animation: none !important; transition: none !important; }
   .reveal { opacity: 1; transform: none; }
+}
+
+/* Mega menu — quick fade/drop on open */
+@keyframes menu-drop {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.menu-drop { animation: menu-drop 0.2s ease-out; }
+
+/* Horizontal scrollers (category tiles on phones) without a visible bar */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Homepage section headings — uppercase sans in rust, like the reference site */
+.section-title {
+  font-family: 'Jost', system-ui, sans-serif;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6B2D1B;
+  text-align: center;
+  font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2rem);
+  line-height: 1.15;
+}
+/* Small uppercase label under homepage tiles */
+.tile-label {
+  font-family: 'Jost', system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6B2D1B;
+  text-align: center;
 }
 
 /* Nav underline hover */

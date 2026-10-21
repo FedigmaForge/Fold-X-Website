@@ -1,21 +1,29 @@
 import { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { X, Trash2, Plus, Minus, ShoppingBag } from 'lucide-react'
+import { X, Trash2, Plus, Minus, ShoppingBag, Gift } from 'lucide-react'
 import useCartStore from '@/store/cartStore'
 import useSettingsStore from '@/store/settingsStore'
 import { formatCurrency } from '@/utils/formatCurrency'
+import { formatVariant } from '@/utils/formatVariant'
 
 export default function CartDrawer() {
   const { items, isOpen, closeCart, removeItem, updateQuantity } = useCartStore()
   const freeShippingThreshold = useSettingsStore((s) => s.freeShippingThreshold)
+  const flatShippingFee = useSettingsStore((s) => s.flatShippingFee)
   const navigate = useNavigate()
   const subtotal = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0)
+  const shipping = subtotal >= freeShippingThreshold ? 0 : flatShippingFee
 
   useEffect(() => {
-    if (isOpen) document.body.style.overflow = 'hidden'
-    else document.body.style.overflow = ''
-    return () => { document.body.style.overflow = '' }
-  }, [isOpen])
+    if (!isOpen) return
+    document.body.style.overflow = 'hidden'
+    const onKey = (e) => { if (e.key === 'Escape') closeCart() }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [isOpen, closeCart])
 
   const handleCheckout = () => {
     closeCart()
@@ -25,13 +33,19 @@ export default function CartDrawer() {
   return (
     <>
       {/* Backdrop */}
-      {isOpen && (
-        <div className="fixed inset-0 bg-black/50 z-40 transition-opacity" onClick={closeCart} />
-      )}
+      <div
+        className={`fixed inset-0 bg-black/40 z-[60] transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={closeCart}
+        aria-hidden="true"
+      />
 
       {/* Drawer */}
       <div
-        className={`fixed top-0 right-0 h-full w-full max-w-sm bg-cream z-50 shadow-2xl flex flex-col transition-transform duration-300 ${
+        role="dialog"
+        aria-modal="true"
+        aria-label="Shopping bag"
+        aria-hidden={!isOpen}
+        className={`fixed top-0 right-0 h-full w-full max-w-md bg-cream z-[61] shadow-2xl flex flex-col transition-transform duration-300 ease-out ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -41,7 +55,7 @@ export default function CartDrawer() {
             <ShoppingBag size={18} strokeWidth={1.5} className="text-brown" />
             <h2 className="text-[11px] tracking-luxury font-sans uppercase text-brown">Cart ({items.reduce((s, i) => s + i.quantity, 0)})</h2>
           </div>
-          <button onClick={closeCart} className="p-1.5 hover:bg-cream-dark transition-colors">
+          <button onClick={closeCart} className="p-1.5 hover:bg-cream-dark transition-colors" aria-label="Close bag">
             <X size={18} className="text-brown-mid" />
           </button>
         </div>
@@ -97,10 +111,8 @@ export default function CartDrawer() {
                   >
                     {item.product.name}
                   </Link>
-                  {Object.keys(item.variant).length > 0 && (
-                    <p className="text-xs font-sans text-brown-mid mt-0.5">
-                      {Object.entries(item.variant).map(([k, v]) => `${k}: ${v}`).join(' · ')}
-                    </p>
+                  {formatVariant(item.variant).length > 0 && (
+                    <p className="text-xs font-sans text-brown-mid mt-0.5">{formatVariant(item.variant).join(' · ')}</p>
                   )}
                   <div className="flex items-center justify-between mt-2">
                     <span className="text-sm font-sans text-brown">{formatCurrency(item.product.price)}</span>
@@ -141,12 +153,16 @@ export default function CartDrawer() {
             </div>
             <div className="flex justify-between text-sm font-sans text-brown-mid">
               <span>Shipping</span>
-              <span className="text-brown">{subtotal >= freeShippingThreshold ? 'FREE' : formatCurrency(99)}</span>
+              <span className="text-brown">{shipping ? formatCurrency(shipping) : 'FREE'}</span>
             </div>
             <div className="flex justify-between font-sans text-brown text-base border-t border-border pt-3">
-              <span>Total</span>
-              <span>{formatCurrency(subtotal >= freeShippingThreshold ? subtotal : subtotal + 99)}</span>
+              <span>Estimated total</span>
+              <span>{formatCurrency(subtotal + shipping)}</span>
             </div>
+            <p className="flex items-center gap-2 text-[11px] font-sans text-brown-mid">
+              <Gift size={13} strokeWidth={1.5} className="shrink-0" />
+              Gift wrap and a personal note can be added at checkout.
+            </p>
             <button
               onClick={handleCheckout}
               className="w-full btn-brand-primary"

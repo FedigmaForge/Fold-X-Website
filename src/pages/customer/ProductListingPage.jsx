@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { SlidersHorizontal, X, ChevronDown } from 'lucide-react'
 import ProductCard from '@/components/customer/ProductCard'
-import { getProducts, getCategories } from '@/services/api'
+import { CategoryBanner, SubcategoryStrip, Breadcrumb } from '@/components/customer/CategoryBanner'
+import { pickBanner, toSlug } from '@/utils/categoryBanner'
+import useSiteContentStore from '@/store/siteContentStore'
+import { getProducts, getCategories, getCollections } from '@/services/api'
 
 const SORT_OPTIONS = [
   { value: 'newest',     label: 'Newest' },
@@ -11,9 +14,9 @@ const SORT_OPTIONS = [
   { value: 'rating',     label: 'Top Rated' },
 ]
 
-const MATERIALS = ['Full Grain Leather', 'Pebbled Leather', 'Croco Embossed Leather', 'Waxed Leather', 'Patent Leather', 'Vegetable Tanned Leather']
+// Material and colour filters list what the catalogue actually contains
+const uniqueSorted = (values) => [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b))
 
-const COLORS = ['Black', 'Dark Brown', 'Tan', 'Cognac', 'Burgundy', 'Navy', 'Caramel', 'Forest Green', 'Champagne Gold', 'Nude']
 
 const BADGES = [
   { value: 'best-seller',     label: 'Best Sellers' },
@@ -42,10 +45,24 @@ export default function ProductListingPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
+  const [collections, setCollections] = useState([])
+  const [facets, setFacets] = useState({ materials: [], colors: [] })
+  const [allProducts, setAllProducts] = useState([]) // whole catalogue: filter options + type thumbnails
+  const banners = useSiteContentStore((s) => s.categoryBanners)
   const [loading, setLoading] = useState(true)
   const [filtersOpen, setFiltersOpen] = useState(false)
 
-  useEffect(() => { getCategories().then(setCategories) }, [])
+  useEffect(() => {
+    getCategories().then(setCategories).catch(() => {})
+    getCollections().then(setCollections).catch(() => {})
+    getProducts().then((all) => {
+      setAllProducts(all)
+      setFacets({
+        materials: uniqueSorted(all.map((p) => p.material)),
+        colors: uniqueSorted(all.flatMap((p) => p.colors ?? [])),
+      })
+    }).catch(() => {})
+  }, [])
 
   const category   = searchParams.get('category')  || ''
   const gender     = searchParams.get('gender')     || ''
@@ -53,6 +70,8 @@ export default function ProductListingPage() {
   const search     = searchParams.get('search')     || ''
   const sort       = searchParams.get('sort')       || 'newest'
   const badge      = searchParams.get('badge')      || ''
+  const collection = searchParams.get('collection') || ''
+  const sale       = searchParams.get('sale')       || '' // "Special Prices"
   const material   = searchParams.get('material')   || ''
   const color      = searchParams.get('color')      || ''
   const minPrice   = searchParams.get('minPrice')   ? Number(searchParams.get('minPrice'))  : undefined
@@ -67,12 +86,12 @@ export default function ProductListingPage() {
 
   const clearAll = () => setSearchParams({})
 
-  const activeFilterCount = [category, gender, type, badge, material, color, minPrice, maxPrice]
+  const activeFilterCount = [category, gender, type, badge, collection, sale, material, color, minPrice, maxPrice]
     .filter(Boolean).length
 
   useEffect(() => {
     setLoading(true)
-    getProducts({ category: category || gender, type, search, sort, minPrice, maxPrice }).then((data) => {
+    getProducts({ category: category || gender, type, collection, sale, search, sort, minPrice, maxPrice }).then((data) => {
       let filtered = [...data]
       if (badge)    filtered = filtered.filter((p) => p.badge?.toLowerCase().replace(/\s/g, '-') === badge)
       if (material) filtered = filtered.filter((p) => p.material === material)
@@ -80,17 +99,46 @@ export default function ProductListingPage() {
       setProducts(filtered)
       setLoading(false)
     })
-  }, [category, gender, type, search, sort, badge, material, color, minPrice, maxPrice])
+  }, [category, gender, type, collection, sale, search, sort, badge, material, color, minPrice, maxPrice])
 
   const typeLabel = type.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
   const baseTitle = search
     ? `Search: "${search}"`
+    : sale
+      ? 'Special Prices'
+    : collection
+      ? collections.find((c) => c.id === collection)?.name || 'Collection'
     : gender
       ? gender === 'women' ? "Women's Collection" : "Men's Collection"
       : category
         ? categories.find((c) => c.id === category)?.name || category
         : 'All Products'
   const pageTitle = type && !search ? `${baseTitle} · ${typeLabel}` : baseTitle
+
+  // ── Banner, breadcrumb and bag-type thumbnails
+  const catId = category || gender
+  const catObj = categories.find((c) => c.id === catId)
+  const banner = pickBanner(banners, searchParams)
+  const genericBanner = !banner || banner.link === '/products'
+  // A page no banner is set up for (e.g. a collection filter) keeps its own title
+  const bannerTitle = genericBanner && pageTitle !== 'All Products' ? pageTitle : banner?.title ?? pageTitle
+  const bannerSub = genericBanner && pageTitle !== 'All Products' ? '' : banner?.sub
+  const bannerImage = banner?.image || catObj?.image || ''
+  const catHref = catId ? (gender ? `/products?gender=${gender}` : `/products?category=${catId}`) : null
+  const typeName = catObj?.sub?.find((n) => toSlug(n).startsWith(type))
+  const crumbs = [
+    ...(catObj ? [{ label: catObj.name, href: type ? catHref : null }] : []),
+    ...(type ? [{ label: typeName ?? typeLabel }] : []),
+    ...(!catObj && !type ? [{ label: bannerTitle }] : []),
+  ]
+  // Each bag type in this category that has at least one product, pictured by its first product
+  const typeItems = (catObj?.sub ?? [])
+    .map((name) => ({
+      label: name,
+      slug: toSlug(name),
+      image: allProducts.find((p) => p.categoryId === catObj.id && p.subcategory && toSlug(p.subcategory) === toSlug(name))?.images?.[0],
+    }))
+    .filter((it) => it.image)
 
   const renderFilterPanel = () => (
     <div>
@@ -128,7 +176,7 @@ export default function ProductListingPage() {
 
       <FilterGroup title="Material">
         <div className="space-y-1">
-          {MATERIALS.map((m) => (
+          {facets.materials.map((m) => (
             <button
               key={m}
               onClick={() => setParam('material', material === m ? '' : m)}
@@ -143,7 +191,7 @@ export default function ProductListingPage() {
 
       <FilterGroup title="Color">
         <div className="flex flex-wrap gap-2">
-          {COLORS.map((c) => (
+          {facets.colors.map((c) => (
             <button
               key={c}
               onClick={() => setParam('color', color === c ? '' : c)}
@@ -155,8 +203,30 @@ export default function ProductListingPage() {
         </div>
       </FilterGroup>
 
-      <FilterGroup title="Collection">
+      {collections.length > 0 && (
+        <FilterGroup title="Collection">
+          <div className="space-y-1">
+            {collections.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => setParam('collection', collection === c.id ? '' : c.id)}
+                className={`block w-full text-left text-[12px] font-sans py-1.5 transition-colors ${collection === c.id ? 'text-brown font-medium' : 'text-brown-mid hover:text-brown'}`}
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
+        </FilterGroup>
+      )}
+
+      <FilterGroup title="Highlights">
         <div className="space-y-1">
+          <button
+            onClick={() => setParam('sale', sale ? '' : '1')}
+            className={`block w-full text-left text-[12px] font-sans py-1.5 transition-colors ${sale ? 'text-brown font-medium' : 'text-brown-mid hover:text-brown'}`}
+          >
+            Special Prices
+          </button>
           {BADGES.map((b) => (
             <button
               key={b.value}
@@ -206,23 +276,34 @@ export default function ProductListingPage() {
 
   return (
     <div className="bg-cream min-h-screen">
-      {/* Page header */}
-      <div className="border-b border-border py-10 px-6">
-        <div className="max-w-screen-xl mx-auto">
-          <p className="text-[10px] tracking-luxury font-sans uppercase text-brown-mid mb-2">
-            <Link to="/" className="hover:text-brown transition-colors">Home</Link>
-            {' / '}{pageTitle}
-          </p>
-          <h1 className="font-serif text-4xl text-brown font-light">{pageTitle}</h1>
-          {!loading && (
-            <p className="text-[11px] font-sans text-brown-mid mt-1">{products.length} pieces</p>
-          )}
+      {/* Category banner (admin → Storefront → Category banners) */}
+      {search ? (
+        <div className="border-b border-border py-10 px-6">
+          <div className="max-w-screen-xl mx-auto">
+            <Breadcrumb trail={[{ label: pageTitle }]} />
+            <h1 className="mt-2 font-serif text-4xl text-brown font-light">{pageTitle}</h1>
+            {!loading && <p className="text-[11px] font-sans text-brown-mid mt-1">{products.length} pieces</p>}
+          </div>
         </div>
-      </div>
+      ) : (
+        <CategoryBanner
+          image={bannerImage}
+          title={bannerTitle}
+          sub={bannerSub}
+          count={loading ? undefined : products.length}
+        />
+      )}
+
+      {!search && (
+        <div className="max-w-screen-xl mx-auto px-6 pt-6 space-y-6">
+          <Breadcrumb trail={crumbs} />
+          <SubcategoryStrip items={typeItems} active={type} onPick={(slug) => setParam('type', slug)} />
+        </div>
+      )}
 
       <div className="max-w-screen-xl mx-auto px-6 py-8 flex gap-10">
         {/* Desktop filter sidebar */}
-        <aside className="hidden lg:block w-52 shrink-0 sticky top-28 self-start">
+        <aside className="hidden lg:block w-52 shrink-0 sticky top-44 self-start">
           {renderFilterPanel()}
         </aside>
 

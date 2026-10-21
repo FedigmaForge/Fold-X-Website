@@ -282,10 +282,15 @@ export default function OrderDetailPage() {
                     {item.product.sku && <p className="text-xs text-gray-400 font-mono">SKU {item.product.sku}</p>}
                     <p className="text-xs text-gray-400">
                       {formatCurrency(item.product.price)} × {item.quantity}
-                      {Object.entries(item.variant || {}).filter(([, v]) => v).map(([k, v]) => (
+                      {Object.entries(item.variant || {}).filter(([k, v]) => v && k !== 'leather').map(([k, v]) => (
                         <span key={k} className="capitalize"> · {k}: {typeof v === 'object' ? v.name ?? JSON.stringify(v) : v}</span>
                       ))}
                     </p>
+                    {item.variant?.leather && (
+                      <p className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium">
+                        Free customisation — make in {item.variant.leather}
+                      </p>
+                    )}
                   </div>
                   <span className="text-sm font-semibold text-gray-900">{formatCurrency(item.product.price * item.quantity)}</span>
                 </div>

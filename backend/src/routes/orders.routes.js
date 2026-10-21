@@ -282,23 +282,34 @@ function addEvent(orderId, type, message, actor) {
 }
 
 // GET /api/admin/orders?status=&paymentStatus=&q=&from=&to=
+// ?customised=1 → orders with a free leather change on any line; =open → those
+// still to be made (pending/processing). Item options are JSON, so this
+// filter runs after the query.
+function filterCustomised(orders, customised) {
+  if (!customised) return orders
+  return orders.filter((o) =>
+    o.items.some((i) => i.variant?.leather) &&
+    (customised !== 'open' || ['pending', 'processing'].includes(o.status))
+  )
+}
+
 router.get('/admin/orders', requireAdmin, asyncRoute(async (req, res) => {
   const orders = await prisma.order.findMany({
     where: buildAdminOrderWhere(req.query),
     include: { items: true },
     orderBy: { createdAt: 'desc' },
   })
-  res.json(orders.map(serializeOrder))
+  res.json(filterCustomised(orders, req.query.customised).map(serializeOrder))
 }))
 
 // GET /api/admin/orders/export.csv — same filters as the list. Declared before
 // /admin/orders/:id so "export.csv" isn't swallowed as an order id.
 router.get('/admin/orders/export.csv', requireAdmin, asyncRoute(async (req, res) => {
-  const orders = await prisma.order.findMany({
+  const orders = filterCustomised(await prisma.order.findMany({
     where: buildAdminOrderWhere(req.query),
     include: { items: true },
     orderBy: { createdAt: 'desc' },
-  })
+  }), req.query.customised)
   const header = [
     'Order ID', 'Date', 'Customer', 'Email', 'Phone', 'City', 'State', 'Pincode', 'Items', 'Units',
     'Subtotal', 'Discount', 'Discount Code', 'Shipping', 'Gift Wrap', 'COD Fee', 'Total', 'Refunded', 'Payment Method', 'Payment Status', 'Status', 'Courier', 'Tracking Number',

@@ -9,9 +9,14 @@
 
 const NOTICE = '> **Before publishing:** fill in the [bracketed] details and have this page reviewed.\n\n'
 
-const CONTACT = `**[Legal business name]** (trading as FoldX)
-B 159 Harinagar, New Delhi – 110064
-Email: [foldx01@gmail.com](mailto:foldx01@gmail.com) · Phone: [1800-001-234](tel:1800001234)`
+// The store trades publicly as FoldX only
+const ADDRESS = 'B 159 Harinagar, New Delhi – 110064'
+const GSTIN = '07BGJPK9798M1Z9'
+const REACH = 'Email: [foldx01@gmail.com](mailto:foldx01@gmail.com) · Phone: [99905 37773](tel:+919990537773)'
+const CONTACT = `**FoldX**
+${ADDRESS}
+GSTIN: ${GSTIN}
+${REACH}`
 
 module.exports = [
   {
@@ -141,7 +146,7 @@ ${CONTACT}`,
     metaDescription: 'What personal data FoldX collects, how it is used and protected, and your rights.',
     body: `${NOTICE}**Last updated:** [date]
 
-This policy explains how **[Legal business name]** ("FoldX", "we") collects and uses your personal data when you visit or shop at our store. It is written to meet the Digital Personal Data Protection Act, 2023 and the Information Technology Act, 2000 and its rules.
+This policy explains how **FoldX** ("we") collects and uses your personal data when you visit or shop at our store. It is written to meet the Digital Personal Data Protection Act, 2023 and the Information Technology Act, 2000 and its rules.
 
 ## What we collect
 
@@ -208,7 +213,8 @@ If we change this policy, we'll update the date at the top. Significant changes 
 If you have a concern about how we handle your data, contact our Grievance Officer:
 
 **[Grievance Officer's name]**
-${CONTACT.replace('**[Legal business name]** (trading as FoldX)\n', '')}
+${ADDRESS}
+${REACH}
 
 We'll acknowledge your complaint within 48 hours and resolve it within 30 days. If you're not satisfied, you can approach the Data Protection Board of India.`,
   },
@@ -220,7 +226,7 @@ We'll acknowledge your complaint within 48 hours and resolve it within 30 days. 
     metaDescription: 'The terms that apply when you use the FoldX website and buy from us.',
     body: `${NOTICE}**Last updated:** [date]
 
-These terms apply when you use this website or buy from **[Legal business name]** ("FoldX", "we", "us"), registered at B 159 Harinagar, New Delhi – 110064, GSTIN **[GSTIN]**. By placing an order, you agree to them.
+These terms apply when you use this website or buy from **FoldX** ("we", "us"), B 159 Harinagar, New Delhi – 110064, GSTIN **07BGJPK9798M1Z9**. By placing an order, you agree to them.
 
 ## Using our store
 
@@ -277,7 +283,8 @@ We may update these terms from time to time; the version on this page when you p
 As required by the Consumer Protection (E-Commerce) Rules, 2020:
 
 **[Grievance Officer's name]**
-${CONTACT.replace('**[Legal business name]** (trading as FoldX)\n', '')}
+${ADDRESS}
+${REACH}
 
 We acknowledge complaints within 48 hours and aim to resolve them within one month.`,
   },

@@ -19,12 +19,16 @@ function toPublic(p) {
   return rest
 }
 
-// GET /api/products?category=&type=&search=&sort=&minPrice=&maxPrice=
+// GET /api/products?category=&type=&collection=&sale=&search=&sort=&minPrice=&maxPrice=
 // SQLite has no case-insensitive `mode` in Prisma and the catalog is small, so
 // text matching is done in JS.
 router.get('/products', asyncRoute(async (req, res) => {
-  const { category, type, search, sort, minPrice, maxPrice } = req.query
+  const { category, type, collection, sale, search, sort, minPrice, maxPrice } = req.query
   let products = await prisma.product.findMany({ where: visibleProductWhere() })
+
+  if (collection) products = products.filter((p) => p.collectionId === collection)
+  // "Special prices": anything currently selling below its original price
+  if (sale) products = products.filter((p) => p.originalPrice > p.price)
 
   if (category) {
     const c = category.toLowerCase()
@@ -181,6 +185,7 @@ function parseProductFields(data, { creating }) {
   if (data.colors !== undefined) out.colors = Array.isArray(data.colors) ? data.colors : []
   if (data.isFeatured !== undefined) out.isFeatured = !!data.isFeatured
   if (data.isActive !== undefined) out.isActive = !!data.isActive
+  if (data.allowCustomisation !== undefined) out.allowCustomisation = !!data.allowCustomisation
   if (data.sku !== undefined) out.sku = parseSku(data.sku)
   if (data.stock !== undefined) out.stock = parseStock(data.stock)
   if (data.lowStockThreshold !== undefined) out.lowStockThreshold = parseStock(data.lowStockThreshold, 'Low-stock threshold')
@@ -191,6 +196,7 @@ function parseProductFields(data, { creating }) {
   const hsn = parseHsnCode(data.hsnCode); if (hsn !== undefined) out.hsnCode = hsn
   const gst = parseGstRate(data.gstRate); if (gst !== undefined) out.gstRate = gst
   const publishAt = parsePublishAt(data.publishAt); if (publishAt !== undefined) out.publishAt = publishAt
+  if (data.collectionId !== undefined) out.collectionId = data.collectionId ? String(data.collectionId).trim() : null
   if (creating) {
     out.slug = out.slug || toSlug(out.name)
     out.category ??= ''
@@ -250,6 +256,14 @@ async function saveVariants(tx, productId, variants, actorName) {
   }
 }
 
+// A product can only join a collection that exists
+async function assertCollection(fields) {
+  if (!fields.collectionId) return
+  if (!(await prisma.collection.findUnique({ where: { id: fields.collectionId } }))) {
+    throw new HttpError(400, 'That collection no longer exists — pick another')
+  }
+}
+
 function getProductFull(db, id) {
   return db.product.findUnique({ where: { id }, include: { variants: { orderBy: { sortOrder: 'asc' } } } })
 }
@@ -257,6 +271,7 @@ function getProductFull(db, id) {
 // POST /api/admin/products
 router.post('/admin/products', requireRole(...CATALOG_WRITE_ROLES), asyncRoute(async (req, res) => {
   const fields = parseProductFields(req.body, { creating: true })
+  await assertCollection(fields)
   const variants = parseVariants(req.body.variants) ?? []
   if (await prisma.product.findUnique({ where: { slug: fields.slug } })) {
     throw new HttpError(409, `A product with URL slug "${fields.slug}" already exists`)
@@ -280,6 +295,7 @@ router.put('/admin/products/:id', requireRole(...CATALOG_WRITE_ROLES), asyncRout
   const current = await prisma.product.findUnique({ where: { id: req.params.id }, include: { variants: true } })
   if (!current) throw new HttpError(404, 'Product not found')
   const fields = parseProductFields(req.body, { creating: false })
+  await assertCollection(fields)
   const variants = parseVariants(req.body.variants)
   if (fields.slug && fields.slug !== current.slug) {
     const taken = await prisma.product.findUnique({ where: { slug: fields.slug } })

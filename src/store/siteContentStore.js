@@ -23,7 +23,13 @@ const useSiteContentStore = create(
       // storefront in the same browser updates without a reload.
       setSection: (key, value) => set({ [key]: value ?? SITE_CONTENT_DEFAULTS[key] }),
     }),
-    { name: 'foldx-site-content', version: 1 }
+    {
+      name: 'foldx-site-content',
+      // Bumped whenever the default sections change (v6: community section)
+      // — drops older caches; hydrate() re-applies saved content.
+      version: 6,
+      migrate: () => ({ ...SITE_CONTENT_DEFAULTS }),
+    }
   )
 )
 

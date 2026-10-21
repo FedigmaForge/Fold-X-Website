@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Package, Image, ShoppingBag,
-  Users, Star, LogOut, Settings, X, ShieldCheck, ScrollText, LayoutTemplate, FolderTree, BarChart3, FileText, Inbox, Undo2, TicketPercent, Wallet, ShoppingCart
+  Users, Layers, MailPlus, Star, LogOut, Settings, X, ShieldCheck, ScrollText, LayoutTemplate, FolderTree, BarChart3, FileText, Inbox, Undo2, TicketPercent, Wallet, ShoppingCart
 } from 'lucide-react'
 import useAuthStore from '@/store/authStore'
 import { usePermissions } from '@/utils/permissions'
@@ -44,11 +44,13 @@ export default function Sidebar({ mobileOpen, onClose }) {
       { to: '/admin/carts', label: 'Abandoned carts', icon: ShoppingCart },
       { to: '/admin/customers', label: 'Customers', icon: Users },
       { to: '/admin/discounts', label: 'Discounts', icon: TicketPercent },
+      { to: '/admin/subscribers', label: 'Subscribers', icon: MailPlus },
       { to: '/admin/inbox', label: 'Inbox', icon: Inbox, badge: support.newMessages },
     ] },
     { title: 'Catalog', items: [
       { to: '/admin/products', label: 'Products', icon: Package },
       { to: '/admin/categories', label: 'Categories', icon: FolderTree },
+      { to: '/admin/collections', label: 'Collections', icon: Layers },
       { to: '/admin/reviews', label: 'Reviews', icon: Star, badge: pendingReviews },
     ] },
     { title: 'Content', items: [

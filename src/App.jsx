@@ -16,6 +16,10 @@ const OrderConfirmationPage = lazy(() => import('@/pages/customer/OrderConfirmat
 const AccountPage = lazy(() => import('@/pages/customer/AccountPage'))
 const JournalPage = lazy(() => import('@/pages/customer/JournalPage'))
 const JournalPostPage = lazy(() => import('@/pages/customer/JournalPostPage'))
+const CollectionsPage = lazy(() => import('@/pages/customer/CollectionsPage'))
+const CollectionPage = lazy(() => import('@/pages/customer/CollectionPage'))
+const GiftStorePage = lazy(() => import('@/pages/customer/GiftStorePage'))
+const CustomisationPage = lazy(() => import('@/pages/customer/CustomisationPage'))
 
 // Admin pages
 const AdminLoginPage = lazy(() => import('@/pages/admin/AdminLoginPage'))
@@ -25,6 +29,8 @@ const ProductFormPage = lazy(() => import('@/pages/admin/ProductFormPage'))
 const BannersPage = lazy(() => import('@/pages/admin/BannersPage'))
 const StorefrontPage = lazy(() => import('@/pages/admin/StorefrontPage'))
 const CategoriesPage = lazy(() => import('@/pages/admin/CategoriesPage'))
+const AdminCollectionsPage = lazy(() => import('@/pages/admin/CollectionsPage'))
+const SubscribersPage = lazy(() => import('@/pages/admin/SubscribersPage'))
 const ReportsPage = lazy(() => import('@/pages/admin/ReportsPage'))
 const PagesPage = lazy(() => import('@/pages/admin/PagesPage'))
 const ContentPage = lazy(() => import('@/pages/customer/ContentPage'))
@@ -73,6 +79,10 @@ export default function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/products" element={<ProductListingPage />} />
             <Route path="/products/:slug" element={<ProductDetailPage />} />
+            <Route path="/collections" element={<CollectionsPage />} />
+            <Route path="/collections/:id" element={<CollectionPage />} />
+            <Route path="/gifts" element={<GiftStorePage />} />
+            <Route path="/customisation" element={<CustomisationPage />} />
             <Route path="/checkout" element={<CheckoutPage />} />
             <Route path="/wishlist" element={<WishlistPage />} />
             <Route path="/order-confirmation/:orderId" element={<OrderConfirmationPage />} />
@@ -96,6 +106,8 @@ export default function App() {
             <Route path="products/new" element={<ProductFormPage />} />
             <Route path="products/:id/edit" element={<ProductFormPage />} />
             <Route path="categories" element={<CategoriesPage />} />
+            <Route path="collections" element={<AdminCollectionsPage />} />
+            <Route path="subscribers" element={<SubscribersPage />} />
             <Route path="banners" element={<BannersPage />} />
             <Route path="storefront" element={<StorefrontPage />} />
             <Route path="pages" element={<PagesPage />} />

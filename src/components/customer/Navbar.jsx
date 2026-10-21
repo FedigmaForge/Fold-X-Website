@@ -1,306 +1,209 @@
-import { useState, useRef, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { Search, ShoppingBag, User, Menu, X, Heart } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { Search, ShoppingBag, User, Menu, Heart } from 'lucide-react'
 import useCartStore from '@/store/cartStore'
 import useAuthStore from '@/store/authStore'
 import useSettingsStore from '@/store/settingsStore'
 import useWishlistStore from '@/store/wishlistStore'
 import useSiteContentStore from '@/store/siteContentStore'
+import { getCollections } from '@/services/api'
+import SearchOverlay from '@/components/customer/SearchOverlay'
+import MobileMenu from '@/components/customer/MobileMenu'
 
-export default function Navbar() {
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const [activeMenu, setActiveMenu] = useState(null)
-  const [accountOpen, setAccountOpen] = useState(false)
-  const menuTimerRef = useRef(null)
-  const navigate = useNavigate()
-  const { items, openCart } = useCartStore()
-  const { isLoggedIn, user, isAdmin, logout } = useAuthStore()
-  const announcementBar = useSettingsStore((s) => s.announcementBar)
-  const wishlistCount = useWishlistStore((s) => s.items.length)
-  // Editable from admin → Storefront
-  const NAV_ITEMS = useSiteContentStore((s) => s.navMenu)
+// Rotating messages (admin → Storefront → Announcement bar). Falls back to
+// the single announcement in admin → Settings when the list is empty.
+function AnnouncementBar() {
+  const announcements = useSiteContentStore((s) => s.announcements)
+  const fallback = useSettingsStore((s) => s.announcementBar)
+  const messages = announcements?.length ? announcements : fallback ? [{ text: fallback, href: '' }] : []
+  const [index, setIndex] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const count = messages.length
 
-  const itemCount = items.reduce((sum, i) => sum + i.quantity, 0)
+  useEffect(() => {
+    if (count <= 1 || paused) return
+    const id = setInterval(() => setIndex((i) => (i + 1) % count), 4500)
+    return () => clearInterval(id)
+  }, [count, paused])
 
-  const handleSearch = (e) => {
-    e.preventDefault()
-    if (searchQuery.trim()) {
-      navigate(`/products?search=${encodeURIComponent(searchQuery.trim())}`)
-      setSearchQuery('')
-      setSearchOpen(false)
-    }
-  }
-
-  const openMenu = (label) => {
-    clearTimeout(menuTimerRef.current)
-    setActiveMenu(label)
-  }
-  const closeMenu = () => {
-    menuTimerRef.current = setTimeout(() => setActiveMenu(null), 120)
-  }
-
-  useEffect(() => () => clearTimeout(menuTimerRef.current), [])
-
-  const activeItem = NAV_ITEMS.find((n) => n.label === activeMenu)
+  if (!count) return null
+  const current = index % count
 
   return (
-    <header className="sticky top-0 z-50 bg-cream">
-      {/* Announcement bar */}
-      <div className="bg-brown text-cream-dark text-center text-[11px] tracking-luxury py-2 font-sans font-light">
-        {announcementBar}
-      </div>
+    <div className="bg-rust text-cream h-9 relative overflow-hidden" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} aria-live="polite">
+      {messages.map((m, i) => {
+        const cls = 'absolute inset-0 flex items-center justify-center text-center px-4 text-[10px] sm:text-[11px] font-sans font-medium uppercase tracking-[0.12em] transition-opacity duration-500'
+        const style = { opacity: i === current ? 1 : 0, pointerEvents: i === current ? 'auto' : 'none' }
+        return m.href ? (
+          <Link key={i} to={m.href} className={`${cls} hover:underline underline-offset-4`} style={style} tabIndex={i === current ? 0 : -1}>
+            <span className="line-clamp-2 leading-tight">{m.text}</span>
+          </Link>
+        ) : (
+          <p key={i} className={cls} style={style} aria-hidden={i !== current}>
+            <span className="line-clamp-2 leading-tight">{m.text}</span>
+          </p>
+        )
+      })}
+    </div>
+  )
+}
 
-      {/* Main header */}
-      <div className="border-b border-border">
-        <div className="max-w-screen-xl mx-auto px-6 flex items-center h-16 gap-6">
-          {/* Left nav (desktop) */}
-          <nav className="hidden lg:flex items-center gap-6 flex-1">
-            {NAV_ITEMS.slice(0, 3).map((item) => (
-              <div
-                key={item.label}
-                className="relative"
-                onMouseEnter={() => openMenu(item.label)}
-                onMouseLeave={closeMenu}
-              >
-                <Link
-                  to={item.href}
-                  className="nav-link text-[11px] tracking-luxury text-brown font-sans font-light uppercase py-5 flex items-center gap-0.5"
-                >
-                  {item.label}
-                </Link>
+function CountBadge({ count }) {
+  if (!count) return null
+  return (
+    <span className="absolute top-0.5 right-0.5 bg-rust text-cream text-[9px] font-sans rounded-full min-w-4 h-4 px-1 flex items-center justify-center leading-none">
+      {count}
+    </span>
+  )
+}
+
+// Da Milano-style header: "+ Contact Us" · logo · search/account/wishlist/bag/☰.
+// On the homepage it floats transparent over the hero slideshow and turns solid
+// once the page scrolls; everywhere else it's solid. All navigation lives in
+// the ☰ drawer.
+export default function Navbar() {
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
+  const [collections, setCollections] = useState([])
+  const [scrolled, setScrolled] = useState(false)
+  const [hovered, setHovered] = useState(false)
+  const accountRef = useRef(null)
+  const location = useLocation()
+  const { items, openCart } = useCartStore()
+  const { isLoggedIn, user, isAdmin, logout } = useAuthStore()
+  const wishlistCount = useWishlistStore((s) => s.items.length)
+  const navMenu = useSiteContentStore((s) => s.navMenu)
+  const itemCount = items.reduce((sum, i) => sum + i.quantity, 0)
+  const isHome = location.pathname === '/'
+
+  useEffect(() => {
+    getCollections().then(setCollections).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  // A "/collections" menu with no sub-links lists the live collections
+  const menu = navMenu.map((item) =>
+    item.href === '/collections' && !item.sub?.length
+      ? { ...item, sub: collections.map((c) => ({ label: c.name, href: `/collections/${c.id}` })) }
+      : item
+  )
+
+  // Close the account drop-down when the page changes
+  const path = location.pathname + location.search
+  const [lastPath, setLastPath] = useState(path)
+  if (path !== lastPath) {
+    setLastPath(path)
+    setAccountOpen(false)
+  }
+
+  useEffect(() => {
+    if (!accountOpen) return
+    const onDown = (e) => { if (!accountRef.current?.contains(e.target)) setAccountOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [accountOpen])
+
+  const closeSearch = useCallback(() => setSearchOpen(false), [])
+  const closeMenu = useCallback(() => setMenuOpen(false), [])
+
+  // Transparent only on the homepage, at the top, with nothing open over it
+  const transparent = isHome && !scrolled && !hovered && !accountOpen
+  const tone = transparent ? 'text-cream' : 'text-brown'
+  const iconBtn = `relative p-2 transition-colors ${transparent ? 'text-cream hover:text-gold-light' : 'text-brown hover:text-brown-mid'}`
+
+  const headerRow = (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className={`${isHome ? 'absolute inset-x-0 top-full' : ''} transition-colors duration-300 ${transparent ? 'bg-gradient-to-b from-black/35 to-transparent' : 'bg-cream border-b border-border shadow-[0_1px_0_rgba(0,0,0,0.02)]'}`}
+    >
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-8 lg:px-12 grid grid-cols-[1fr_auto_1fr] items-center h-16 lg:h-20">
+        {/* Left: + Contact Us (desktop) · logo sits here on phones */}
+        <div className="flex items-center">
+          <Link to="/contact" className={`hidden lg:inline text-[11px] font-sans font-medium uppercase tracking-[0.1em] ${tone} hover:opacity-80`}>
+            + Contact Us
+          </Link>
+          <Link to="/" className="lg:hidden" aria-label="FoldX home">
+            <span className={`font-serif text-2xl tracking-[0.25em] font-light ${tone}`}>FOLDX</span>
+          </Link>
+        </div>
+
+        {/* Centre logo (desktop) */}
+        <Link to="/" className="hidden lg:block justify-self-center text-center" aria-label="FoldX home">
+          <span className={`block font-serif text-[32px] leading-none tracking-[0.3em] font-light ${tone}`}>FOLDX</span>
+          <span className={`block mt-1 text-[8px] tracking-[0.6em] font-sans uppercase ${transparent ? 'text-cream/80' : 'text-brown-mid'}`}>Leather Bags</span>
+        </Link>
+        <span className="lg:hidden" />
+
+        {/* Right: icons + menu */}
+        <div className="flex items-center justify-end gap-0 sm:gap-1">
+          <button onClick={() => setSearchOpen(true)} className={iconBtn} aria-label="Search">
+            <Search size={20} strokeWidth={1.4} />
+          </button>
+
+          <div className="relative hidden sm:block" ref={accountRef}>
+            <button onClick={() => setAccountOpen((o) => !o)} className={iconBtn} aria-label="Account" aria-expanded={accountOpen}>
+              <User size={20} strokeWidth={1.4} />
+            </button>
+            {accountOpen && (
+              <div className="absolute right-0 top-full mt-1 w-52 bg-cream border border-border shadow-lg py-1 z-50 text-brown">
+                {isLoggedIn ? (
+                  <>
+                    <div className="px-4 py-2.5 border-b border-border">
+                      <p className="text-[11px] tracking-wide text-brown-mid font-sans uppercase truncate">{user?.name}</p>
+                    </div>
+                    <Link to="/account" className="block px-4 py-2 text-xs tracking-wide font-sans uppercase hover:bg-cream-dark">My Orders</Link>
+                    {(isAdmin || user?.role === 'admin') && (
+                      <Link to="/admin/dashboard" className="block px-4 py-2 text-xs tracking-wide text-gold font-sans uppercase hover:bg-cream-dark">Admin Panel</Link>
+                    )}
+                    <button onClick={() => { logout(); setAccountOpen(false) }} className="w-full text-left block px-4 py-2 text-xs tracking-wide text-brown-mid font-sans uppercase hover:bg-cream-dark border-t border-border mt-1">
+                      Sign Out
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link to="/account" className="block px-4 py-2 text-xs tracking-wide font-sans uppercase hover:bg-cream-dark">Log In / Register</Link>
+                    <Link to="/admin/login" className="block px-4 py-2 text-xs tracking-wide text-gold font-sans uppercase hover:bg-cream-dark border-t border-border">Admin Login</Link>
+                  </>
+                )}
               </div>
-            ))}
-          </nav>
-
-          {/* Logo (centered) */}
-          <div className="flex-1 lg:flex-none text-center">
-            <Link to="/" className="inline-block">
-              <span className="font-serif text-2xl tracking-[0.3em] text-brown font-light">FOLDX</span>
-            </Link>
-          </div>
-
-          {/* Right nav (desktop) */}
-          <nav className="hidden lg:flex items-center gap-6 flex-1 justify-end">
-            {NAV_ITEMS.slice(3).map((item) => (
-              <div
-                key={item.label}
-                className="relative"
-                onMouseEnter={() => openMenu(item.label)}
-                onMouseLeave={closeMenu}
-              >
-                <Link
-                  to={item.href}
-                  className="nav-link text-[11px] tracking-luxury text-brown font-sans font-light uppercase py-5 flex items-center gap-0.5"
-                >
-                  {item.label}
-                </Link>
-              </div>
-            ))}
-          </nav>
-
-          {/* Icons */}
-          <div className="flex items-center gap-1 ml-auto lg:ml-0">
-            {/* Search */}
-            <button
-              onClick={() => setSearchOpen((o) => !o)}
-              className="p-2 text-brown hover:text-brown-mid transition-colors"
-              aria-label="Search"
-            >
-              <Search size={18} strokeWidth={1.5} />
-            </button>
-
-            {/* Wishlist */}
-            <Link to="/wishlist" className="relative p-2 text-brown hover:text-brown-mid transition-colors hidden sm:block" aria-label="Wishlist">
-              <Heart size={18} strokeWidth={1.5} />
-              {wishlistCount > 0 && (
-                <span className="absolute top-1 right-1 bg-brown text-cream text-[9px] font-sans rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                  {wishlistCount}
-                </span>
-              )}
-            </Link>
-
-            {/* Account */}
-            <div className="relative hidden sm:block">
-              <button
-                onClick={() => setAccountOpen((o) => !o)}
-                className="p-2 text-brown hover:text-brown-mid transition-colors"
-                aria-label="Account"
-              >
-                <User size={18} strokeWidth={1.5} />
-              </button>
-              {accountOpen && (
-                <div
-                  className="absolute right-0 top-full mt-1 w-48 bg-cream border border-border shadow-lg py-1 z-50"
-                  onMouseLeave={() => setAccountOpen(false)}
-                >
-                  {isLoggedIn ? (
-                    <>
-                      <div className="px-4 py-2.5 border-b border-border">
-                        <p className="text-[11px] tracking-wide text-brown-mid font-sans uppercase">{user?.name}</p>
-                      </div>
-                      <Link to="/account" onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-xs tracking-wide text-brown font-sans uppercase hover:bg-cream-dark transition-colors">
-                        My Orders
-                      </Link>
-                      {(isAdmin || user?.role === 'admin') && (
-                        <Link to="/admin/dashboard" onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-xs tracking-wide text-gold font-sans uppercase hover:bg-cream-dark transition-colors">
-                          Admin Panel
-                        </Link>
-                      )}
-                      <button onClick={() => { logout(); setAccountOpen(false) }} className="w-full text-left block px-4 py-2 text-xs tracking-wide text-brown-mid font-sans uppercase hover:bg-cream-dark transition-colors border-t border-border mt-1">
-                        Sign Out
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <Link to="/account" onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-xs tracking-wide text-brown font-sans uppercase hover:bg-cream-dark transition-colors">
-                        Sign In
-                      </Link>
-                      <Link to="/admin/login" onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-xs tracking-wide text-gold font-sans uppercase hover:bg-cream-dark transition-colors border-t border-border">
-                        Admin Login
-                      </Link>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Cart */}
-            <button
-              onClick={openCart}
-              className="relative p-2 text-brown hover:text-brown-mid transition-colors"
-              aria-label="Cart"
-            >
-              <ShoppingBag size={18} strokeWidth={1.5} />
-              {itemCount > 0 && (
-                <span className="absolute top-1 right-1 bg-brown text-cream text-[9px] font-sans rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                  {itemCount}
-                </span>
-              )}
-            </button>
-
-            {/* Mobile hamburger */}
-            <button
-              onClick={() => setMobileOpen((o) => !o)}
-              className="p-2 text-brown hover:text-brown-mid transition-colors lg:hidden"
-            >
-              {mobileOpen ? <X size={18} strokeWidth={1.5} /> : <Menu size={18} strokeWidth={1.5} />}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Mega menu dropdown */}
-      {activeItem && (
-        <div
-          className="absolute top-full left-0 right-0 bg-cream border-b border-border shadow-xl z-40 hidden lg:block"
-          onMouseEnter={() => openMenu(activeItem.label)}
-          onMouseLeave={closeMenu}
-        >
-          <div className="max-w-screen-xl mx-auto px-6 py-8 flex gap-16">
-            {/* Links */}
-            <div className="flex-1">
-              <p className="text-[10px] tracking-luxury text-brown-mid font-sans uppercase mb-4">{activeItem.label}</p>
-              <ul className="space-y-3">
-                {activeItem.sub.map((s) => (
-                  <li key={s.label}>
-                    <Link
-                      to={s.href}
-                      onClick={() => setActiveMenu(null)}
-                      className="font-serif text-lg text-brown hover:text-brown-mid transition-colors leading-tight"
-                    >
-                      {s.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-              <Link
-                to={activeItem.href}
-                onClick={() => setActiveMenu(null)}
-                className="inline-block mt-6 text-[10px] tracking-luxury text-brown font-sans uppercase border-b border-brown pb-0.5 hover:text-brown-mid hover:border-brown-mid transition-colors"
-              >
-                View All {activeItem.label}
-              </Link>
-            </div>
-
-            {/* Featured image */}
-            <div className="w-64 shrink-0">
-              <Link to={activeItem.featured.href} onClick={() => setActiveMenu(null)} className="block group">
-                <div className="overflow-hidden">
-                  <img
-                    src={activeItem.featured.image}
-                    alt={activeItem.featured.label}
-                    className="w-full h-72 object-cover group-hover:scale-105 transition-transform duration-700"
-                  />
-                </div>
-                <p className="mt-3 text-[10px] tracking-luxury text-brown font-sans uppercase">{activeItem.featured.label} →</p>
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Search overlay */}
-      {searchOpen && (
-        <div className="border-b border-border bg-cream">
-          <form onSubmit={handleSearch} className="max-w-screen-xl mx-auto px-6 py-4 flex items-center gap-4">
-            <Search size={16} strokeWidth={1.5} className="text-brown-mid shrink-0" />
-            <input
-              autoFocus
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search wallets, bags, accessories…"
-              className="flex-1 bg-transparent outline-none text-sm font-sans font-light text-brown placeholder:text-brown-mid tracking-wide"
-            />
-            <button
-              type="button"
-              onClick={() => setSearchOpen(false)}
-              className="text-brown-mid hover:text-brown transition-colors"
-            >
-              <X size={16} strokeWidth={1.5} />
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* Mobile menu */}
-      {mobileOpen && (
-        <div className="lg:hidden border-t border-border bg-cream">
-          {NAV_ITEMS.map((item) => (
-            <div key={item.label} className="border-b border-border">
-              <Link
-                to={item.href}
-                onClick={() => setMobileOpen(false)}
-                className="block px-6 py-4 text-[11px] tracking-luxury text-brown font-sans uppercase"
-              >
-                {item.label}
-              </Link>
-            </div>
-          ))}
-          <div className="px-6 py-4 border-b border-border flex flex-col gap-3">
-            {isLoggedIn ? (
-              <>
-                <Link to="/account" onClick={() => setMobileOpen(false)} className="text-[11px] tracking-luxury text-brown font-sans uppercase">
-                  My Account
-                </Link>
-                <button onClick={() => { logout(); setMobileOpen(false) }} className="text-left text-[11px] tracking-luxury text-brown-mid font-sans uppercase">
-                  Sign Out
-                </button>
-              </>
-            ) : (
-              <>
-                <Link to="/account" onClick={() => setMobileOpen(false)} className="text-[11px] tracking-luxury text-brown font-sans uppercase">
-                  Sign In
-                </Link>
-                <Link to="/admin/login" onClick={() => setMobileOpen(false)} className="text-[11px] tracking-luxury text-gold font-sans uppercase">
-                  Admin Login
-                </Link>
-              </>
             )}
           </div>
+
+          <Link to="/wishlist" className={`${iconBtn} hidden sm:block`} aria-label="Wishlist">
+            <Heart size={20} strokeWidth={1.4} />
+            <CountBadge count={wishlistCount} />
+          </Link>
+
+          <button onClick={openCart} className={iconBtn} aria-label={`Bag, ${itemCount} item${itemCount === 1 ? '' : 's'}`}>
+            <ShoppingBag size={20} strokeWidth={1.4} />
+            <CountBadge count={itemCount} />
+          </button>
+
+          <button onClick={() => setMenuOpen(true)} className={`${iconBtn} ml-1 sm:ml-3`} aria-label="Open menu">
+            <Menu size={24} strokeWidth={1.2} />
+          </button>
         </div>
-      )}
-    </header>
+      </div>
+    </div>
+  )
+
+  return (
+    <>
+      <header className="sticky top-0 z-50">
+        <AnnouncementBar />
+        {headerRow}
+      </header>
+
+      <SearchOverlay open={searchOpen} onClose={closeSearch} />
+      <MobileMenu open={menuOpen} onClose={closeMenu} menu={menu} />
+    </>
   )
 }

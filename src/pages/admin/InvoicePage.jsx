@@ -3,6 +3,7 @@ import { Navigate, useParams } from 'react-router-dom'
 import { Printer } from 'lucide-react'
 import { getOrderById, getAdminSettings } from '@/services/api'
 import useAuthStore from '@/store/authStore'
+import { formatVariant } from '@/utils/formatVariant'
 
 // Two decimals on an invoice (unlike the rest of the admin, which rounds to whole rupees)
 const money = (n) =>
@@ -36,7 +37,7 @@ function computeTax(order, settings) {
       hsn: item.product.hsnCode || defaultHsn,
       quantity: item.quantity,
       details: [
-        ...Object.entries(item.variant || {}).filter(([, v]) => v && typeof v !== 'object').map(([k, v]) => `${k}: ${v}`),
+        ...formatVariant(item.variant),
         ...(lineDiscount ? [`Discount −${money(lineDiscount)}`] : []),
       ],
     }, item.product.price * item.quantity - lineDiscount, rate)
@@ -92,7 +93,9 @@ export default function InvoicePage() {
 
   const { order, settings } = data
   const addr = order.address || {}
-  const sellerName = settings.legalName || settings.storeName
+  // The store trades publicly as its store name only (FoldX); registered
+  // names in Settings are kept for records and not printed
+  const sellerName = settings.storeName
   const tax = computeTax(order, settings)
 
   return (
@@ -111,7 +114,6 @@ export default function InvoicePage() {
         <div className="flex justify-between items-start border-b border-gray-200 pb-6">
           <div>
             <p className="font-serif text-3xl tracking-[0.3em] font-light uppercase text-gray-900">{settings.storeName}</p>
-            {settings.legalName && settings.legalName !== settings.storeName && <p className="text-gray-600">{settings.legalName}</p>}
             {settings.address && <p className="text-gray-500 whitespace-pre-line mt-1 max-w-xs">{settings.address}</p>}
             {settings.gstin && <p className="text-gray-700 mt-1"><span className="text-gray-400">GSTIN:</span> {settings.gstin}</p>}
             {(settings.supportEmail || settings.supportPhone) && (

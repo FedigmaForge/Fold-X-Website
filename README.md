@@ -1,6 +1,3 @@
-# Fold-X-Website
-This is having Backend, Frontend and Dashboard Codes
-
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

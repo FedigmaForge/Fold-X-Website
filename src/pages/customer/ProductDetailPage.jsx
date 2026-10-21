@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ShoppingCart, Zap, Heart, CheckCircle, Truck, ZoomIn, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ShoppingCart, Zap, Heart, CheckCircle, Truck, ZoomIn, X, ChevronLeft, ChevronRight, Scissors } from 'lucide-react'
 import StarRating from '@/components/ui/StarRating'
 import { DiscountBadge } from '@/components/ui/Badge'
 import { formatCurrency } from '@/utils/formatCurrency'
@@ -69,6 +69,7 @@ export default function ProductDetailPage() {
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [selectedVariant, setSelectedVariant] = useState({})
   const [qty, setQty] = useState(1)
+  const [customLeather, setCustomLeather] = useState('') // '' = the bag's standard leather
   const [tab, setTab] = useState('description')
   const [reviewForm, setReviewForm] = useState({ rating: 5, title: '', body: '' })
   const [submittingReview, setSubmittingReview] = useState(false)
@@ -79,6 +80,7 @@ export default function ProductDetailPage() {
   const { isLoggedIn, user } = useAuthStore()
   const inWishlist = useWishlistStore((s) => (product ? s.isInWishlist(product.id) : false))
   const storeName = useSettingsStore((s) => s.storeName)
+  const { customisationEnabled, customLeathers, customisationNote } = useSettingsStore()
   // Search-engine title/description, editable per product in the admin
   useDocumentMeta(
     product ? `${product.metaTitle || product.name} | ${storeName}` : null,
@@ -104,6 +106,7 @@ export default function ProductDetailPage() {
         const first = vs.find((v) => v.stock > 0) ?? vs[0]
         setSelectedVariant(first ? { color: first.color, size: first.size } : (p.colors?.length ? { color: p.colors[0] } : {}))
         setQty(1)
+        setCustomLeather('')
         // "Complete the Look" — other pieces from the same category, not the product itself
         getProducts({ category: p.categoryId }).then((all) => {
           setRelated((Array.isArray(all) ? all : []).filter((x) => x.id !== p.id).slice(0, 4))
@@ -172,10 +175,18 @@ export default function ProductDetailPage() {
     setQty(1)
   }
 
+  // ── Free customisation: the same bag made in another leather, at no charge
+  const leatherOptions = String(customLeathers ?? '')
+    .split(',')
+    .map((l) => l.trim())
+    .filter((l) => l && l.toLowerCase() !== (product?.material ?? '').toLowerCase())
+  const canCustomise = !!product && customisationEnabled && product.allowCustomisation !== false && leatherOptions.length > 0
+
   // Only the attributes that matter, e.g. { color: 'Tan' } — shown in the bag
-  const variantForCart = hasVariants
+  const baseVariant = hasVariants
     ? Object.fromEntries(Object.entries({ color: chosen?.color, size: chosen?.size }).filter(([, v]) => v))
     : selectedVariant
+  const variantForCart = canCustomise && customLeather ? { ...baseVariant, leather: customLeather } : baseVariant
 
   const addToBag = () => addItem(product, Math.min(qty, available), variantForCart, chosen?.id)
 
@@ -362,6 +373,45 @@ export default function ProductDetailPage() {
             </div>
           )}
 
+          {/* Free customisation — change the leather */}
+          {canCustomise && (
+            <div className="border border-border bg-cream-dark/40 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="flex items-center gap-2 text-[11px] tracking-luxury font-sans uppercase text-brown">
+                  <Scissors size={14} strokeWidth={1.5} /> Customisation
+                </p>
+                <span className="text-[10px] tracking-luxury font-sans uppercase bg-brown text-cream px-2 py-0.5">Free</span>
+              </div>
+              <p className="mt-2 text-[12px] font-sans font-light text-brown-mid">
+                Love the design in a different leather? Choose it here — no extra charge.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Leather">
+                <button
+                  role="radio"
+                  aria-checked={!customLeather}
+                  onClick={() => setCustomLeather('')}
+                  className={`px-3 py-1.5 border text-xs font-sans transition-colors ${!customLeather ? 'border-brown bg-brown text-cream' : 'border-border bg-cream text-brown hover:border-brown-mid'}`}
+                >
+                  Standard{product.material ? ` · ${product.material}` : ''}
+                </button>
+                {leatherOptions.map((l) => (
+                  <button
+                    key={l}
+                    role="radio"
+                    aria-checked={customLeather === l}
+                    onClick={() => setCustomLeather(l)}
+                    className={`px-3 py-1.5 border text-xs font-sans transition-colors ${customLeather === l ? 'border-brown bg-brown text-cream' : 'border-border bg-cream text-brown hover:border-brown-mid'}`}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+              {customLeather && customisationNote && (
+                <p className="mt-3 text-[11px] font-sans text-brown">{customisationNote}</p>
+              )}
+            </div>
+          )}
+
           {/* Quantity */}
           <div className="flex items-center gap-3">
             <p className="text-[10px] tracking-luxury font-sans uppercase text-brown-mid">Quantity</p>
@@ -414,12 +464,12 @@ export default function ProductDetailPage() {
 
       {/* Tabs */}
       <div>
-        <div className="flex border-b border-border">
+        <div className="flex border-b border-border overflow-x-auto no-scrollbar">
           {['description', 'features', 'care', 'reviews'].map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`px-6 py-3 text-[11px] tracking-luxury font-sans uppercase transition-colors border-b-2 -mb-px ${tab === t ? 'border-brown text-brown' : 'border-transparent text-brown-mid hover:text-brown'}`}
+              className={`shrink-0 px-3 sm:px-6 py-3 text-[11px] tracking-luxury font-sans uppercase transition-colors border-b-2 -mb-px ${tab === t ? 'border-brown text-brown' : 'border-transparent text-brown-mid hover:text-brown'}`}
             >
               {t}{t === 'reviews' && ` (${reviews.length})`}
             </button>

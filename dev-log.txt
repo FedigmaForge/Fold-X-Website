@@ -1,0 +1,46 @@
+
+> foldx@0.0.0 dev:all
+> concurrently -n frontend,backend -c blue,green "npm run dev" "npm run dev --prefix backend"
+
+[frontend] 
+[frontend] > foldx@0.0.0 dev
+[frontend] > vite
+[frontend] 
+[backend] 
+[backend] > foldx-backend@0.1.0 dev
+[backend] > node --watch src/server.js
+[backend] 
+[backend] FoldX backend listening on http://localhost:4001
+[backend] Restarting 'src/server.js'
+[frontend] 3:31:33 pm [vite] (client) Re-optimizing dependencies because vite config has changed
+[frontend] 
+[frontend]   VITE v8.0.16  ready in 1729 ms
+[frontend] 
+[frontend]   ➜  Local:   http://localhost:5173/
+[frontend]   ➜  Network: use --host to expose
+[frontend] 3:31:34 pm [vite] (client) [optimizer] bundling dependencies...
+[backend] FoldX backend listening on http://localhost:4001
+[backend] [0mGET /api/banners [32m200[0m 122.040 ms - 965[0m
+[backend] [0mGET /api/settings [32m200[0m 15.944 ms - 371[0m
+[backend] [0mGET /api/settings [36m304[0m 12.994 ms - -[0m
+[backend] [0mGET /api/banners [32m200[0m 11.159 ms - 965[0m
+[backend] [0mGET /api/products/featured [32m200[0m 16.014 ms - 5185[0m
+[backend] [0mGET /api/products?sort=rating [32m200[0m 16.290 ms - 8514[0m
+[backend] [0mGET /api/banners [36m304[0m 8.473 ms - -[0m
+[backend] [0mGET /api/products/featured [36m304[0m 5.667 ms - -[0m
+[backend] [0mGET /api/products?sort=rating [36m304[0m 7.765 ms - -[0m
+[backend] [0mGET /api/settings [32m200[0m 12.574 ms - 371[0m
+[backend] [0mGET /api/settings [36m304[0m 10.034 ms - -[0m
+[backend] [0mGET /api/banners [32m200[0m 12.026 ms - 965[0m
+[backend] [0mGET /api/products/featured [32m200[0m 17.045 ms - 5185[0m
+[backend] [0mGET /api/products?sort=rating [32m200[0m 21.096 ms - 8514[0m
+[backend] [0mGET /api/banners [36m304[0m 3.644 ms - -[0m
+[backend] [0mGET /api/products/featured [36m304[0m 5.281 ms - -[0m
+[backend] [0mGET /api/products?sort=rating [36m304[0m 8.133 ms - -[0m
+[backend] [0mGET /api/products?category=women&sort=newest [32m200[0m 7.908 ms - 3458[0m
+[backend] [0mGET /api/categories [32m200[0m 41.222 ms - 1232[0m
+[backend] [0mGET /api/products?category=women&sort=newest [36m304[0m 19.592 ms - -[0m
+[backend] [0mGET /api/categories [36m304[0m 25.158 ms - -[0m
+[backend] Restarting 'src/server.js'
+[backend] Restarting 'src/server.js'
+[backend] FoldX backend listening on http://localhost:4001

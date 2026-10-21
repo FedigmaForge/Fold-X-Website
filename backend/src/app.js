@@ -28,6 +28,8 @@ const couponsRoutes = require('./routes/coupons.routes')
 const staffAuthRoutes = require('./routes/staffAuth.routes')
 const financeRoutes = require('./routes/finance.routes')
 const cartsRoutes = require('./routes/carts.routes')
+const collectionsRoutes = require('./routes/collections.routes')
+const newsletterRoutes = require('./routes/newsletter.routes')
 
 const app = express()
 
@@ -73,6 +75,8 @@ app.use('/api', couponsRoutes)
 app.use('/api', staffAuthRoutes)
 app.use('/api', financeRoutes)
 app.use('/api', cartsRoutes)
+app.use('/api', collectionsRoutes)
+app.use('/api', newsletterRoutes)
 
 app.use(notFoundHandler)
 app.use(errorHandler)
