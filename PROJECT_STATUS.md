@@ -7,10 +7,7 @@ FoldX is an online store for handcrafted leather goods (India, INR, GST). It is 
 This document is the starting point for any developer picking the project up:
 what exists, how it fits together, how to run it, and what is still to do.
 
-> ⚠️ **Most of the work below is not committed yet.** The last commit is
-> `7b030ad` (17 Sep 2026). Everything from "Order management" onwards — 7
-> database migrations and ~115 files — is only in the working tree. Commit
-> before doing anything else.
+> All work up to 21 Oct 2026 is committed (`d2fd28d`), including all 14 database migrations.
 
 ---
 
@@ -216,7 +213,7 @@ Read these before changing checkout, stock or money code.
 | Content | `Banner`, `SiteContent` (menu/announcements/homepage sections/gift store/footer JSON), `Page`, `Collection`, `NewsletterSubscriber` |
 | Admin | `Settings` (single row, id 1), `AuditLog`, `StaffLogin` |
 
-**Migrations** (in order): `init` → `add_user_isactive` → `add_gift_wrap` → `add_staff_roles_and_audit_log` → *(not committed from here)* `order_management` → `stock_and_gst` → `site_content` → `variants_content_support` → `coupons` → `customers_and_cod` → `finance_2fa_carts` → `collections_newsletter` → `free_customisation` → `custom_leathers_text` (the second fixes a JSON default SQLite can't store — leathers are a comma-separated string).
+**Migrations** (in order): `init` → `add_user_isactive` → `add_gift_wrap` → `add_staff_roles_and_audit_log` → `order_management` → `stock_and_gst` → `site_content` → `variants_content_support` → `coupons` → `customers_and_cod` → `finance_2fa_carts` → `collections_newsletter` → `free_customisation` → `custom_leathers_text` (the second fixes a JSON default SQLite can't store — leathers are a comma-separated string).
 
 Moving to Postgres: change `provider` in `schema.prisma` and `DATABASE_URL`, then create a fresh migration baseline. Some code relies on SQLite's case-insensitive `LIKE` for `contains` and then re-checks exact matches in JS — that still works on Postgres but could use `mode: 'insensitive'` there.
 
