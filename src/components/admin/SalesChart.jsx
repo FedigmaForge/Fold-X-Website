@@ -47,10 +47,10 @@ export default function SalesChart({ data }) {
       <ResponsiveContainer width="100%" height={280}>
         {view === 'revenue' ? (
           <LineChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey="day" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+            <CartesianGrid stroke="#F0EBE3" />
+            <XAxis dataKey="day" tick={{ fontSize: 12, fill: '#9E8878' }} axisLine={false} tickLine={false} />
             <YAxis
-              tick={{ fontSize: 12, fill: '#94a3b8' }}
+              tick={{ fontSize: 12, fill: '#9E8878' }}
               axisLine={false}
               tickLine={false}
               tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
@@ -60,19 +60,19 @@ export default function SalesChart({ data }) {
               type="monotone"
               dataKey="revenue"
               name="Revenue"
-              stroke="#7c3aed"
+              stroke="#2C1810"
               strokeWidth={2.5}
-              dot={{ fill: '#7c3aed', strokeWidth: 0, r: 4 }}
+              dot={{ fill: '#2C1810', strokeWidth: 0, r: 4 }}
               activeDot={{ r: 6 }}
             />
           </LineChart>
         ) : (
           <BarChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-            <XAxis dataKey="day" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+            <CartesianGrid stroke="#F0EBE3" vertical={false} />
+            <XAxis dataKey="day" tick={{ fontSize: 12, fill: '#9E8878' }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 12, fill: '#9E8878' }} axisLine={false} tickLine={false} />
             <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="orders" name="Orders" fill="#7c3aed" radius={[6, 6, 0, 0]} />
+            <Bar dataKey="orders" name="Orders" fill="#C9A84C" radius={[1, 1, 0, 0]} />
           </BarChart>
         )}
       </ResponsiveContainer>

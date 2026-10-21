@@ -1,77 +1,169 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { ChevronRight, ShieldCheck, Gift, Smartphone, CreditCard, Landmark, Wallet } from 'lucide-react'
+import { ChevronRight, ShieldCheck, Gift, Smartphone, CreditCard, Landmark, Wallet, Tag, X, Banknote } from 'lucide-react'
 import { formatCurrency } from '@/utils/formatCurrency'
+import { formatVariant } from '@/utils/formatVariant'
 import { initiatePayment } from '@/utils/razorpay'
-import { placeOrder, createRazorpayOrder, verifyPayment } from '@/services/api'
+import { placeOrder, createRazorpayOrder, verifyPayment, getOrderQuote, saveCheckoutCart } from '@/services/api'
 import useCartStore from '@/store/cartStore'
 import useSettingsStore from '@/store/settingsStore'
+import { INDIAN_STATES } from '@/data/indianStates'
 import toast from 'react-hot-toast'
+import { getCartToken, resetCartToken, peekOfferCode, clearOfferCode, peekRecoveredContact, clearRecoveredContact } from '@/utils/cartToken'
 
 const STEPS = ['Address', 'Review Order', 'Payment']
-const GIFT_WRAP_FEE = 149
+
+// What the server needs to price the order — ids and quantities only. Prices
+// are always looked up server-side.
+const toOrderItems = (items) => items.map((i) => ({
+  product: { id: i.product.id },
+  variantId: i.variantId,
+  variant: i.variant,
+  quantity: i.quantity,
+}))
 
 export default function CheckoutPage() {
   const [step, setStep] = useState(0)
-  const [address, setAddress] = useState({ name: '', phone: '', email: '', line1: '', city: '', state: '', pincode: '' })
+  // Arriving from a cart-recovery link, name and email are already known
+  const [address, setAddress] = useState(() => {
+    const known = peekRecoveredContact()
+    return { name: known?.name ?? '', phone: '', email: known?.email ?? '', line1: '', city: '', state: '', pincode: '' }
+  })
   const [processing, setProcessing] = useState(false)
   const [giftWrap, setGiftWrap] = useState(false)
   const [giftNote, setGiftNote] = useState('')
+  const [quote, setQuote] = useState(null)
+  // Promo code: what's typed, the code we're asking the server to apply, and
+  // any message about it (invalid, or beaten by an automatic discount)
+  // A code from an abandoned-cart reminder link arrives pre-applied
+  const [codeInput, setCodeInput] = useState(() => peekOfferCode() ?? '')
+  const [appliedCode, setAppliedCode] = useState(() => peekOfferCode())
+  const [codeMessage, setCodeMessage] = useState(null)
+  const [paymentMethod, setPaymentMethod] = useState('online') // 'online' | 'cod'
+  // One key per checkout visit: a double-clicked "Place order" for cash on
+  // delivery returns the same order instead of creating two
+  const [checkoutKey] = useState(() => `cod_${crypto.randomUUID()}`)
 
   const { items, clearCart } = useCartStore()
-  const freeShippingThreshold = useSettingsStore((s) => s.freeShippingThreshold)
+  const { freeShippingThreshold, flatShippingFee, giftWrapFee: GIFT_WRAP_FEE } = useSettingsStore()
   const navigate = useNavigate()
-  const subtotal = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0)
 
-  const shipping = subtotal >= freeShippingThreshold ? 0 : 99
-  const giftWrapFee = giftWrap ? GIFT_WRAP_FEE : 0
-  const total = subtotal + shipping + giftWrapFee
+  // Local estimate for instant feedback; replaced by the server's quote (the
+  // amount that will actually be charged) as soon as it arrives.
+  const estSubtotal = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0)
+  const estShipping = estSubtotal >= freeShippingThreshold ? 0 : flatShippingFee
+  const estimate = { subtotal: estSubtotal, discount: 0, shipping: estShipping, giftWrapFee: giftWrap ? GIFT_WRAP_FEE : 0 }
+  estimate.total = estimate.subtotal + estimate.shipping + estimate.giftWrapFee
+  const { subtotal, discount, shipping, giftWrapFee, total } = quote ?? estimate
+
+  useEffect(() => {
+    if (items.length === 0) return
+    let stale = false
+    getOrderQuote({ items: toOrderItems(items), giftWrap, couponCode: appliedCode, email: address.email || undefined, paymentMethod })
+      .then((q) => {
+        if (stale) return
+        setQuote(q)
+        // e.g. the order grew past the COD limit — fall back to paying online
+        if (paymentMethod === 'cod' && !q.codAvailable) setPaymentMethod('online')
+        if (q.couponError) {
+          // Don't keep a code that doesn't work — paying would be refused
+          setCodeMessage({ tone: 'error', text: q.couponError })
+          setAppliedCode(null)
+        } else if (q.couponNotice) {
+          setCodeMessage({ tone: 'info', text: q.couponNotice })
+        } else if (appliedCode && q.discountCode === appliedCode) {
+          setCodeMessage(null)
+        }
+      })
+      .catch((err) => { if (!stale) { setQuote(null); toast.error(err.message) } })
+    return () => { stale = true }
+    // address.email matters for per-customer and first-order rules, but only
+    // once it's final — the quote re-runs when the review step mounts anyway
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, giftWrap, appliedCode, step, paymentMethod])
+
+  const applyCode = (e) => {
+    e.preventDefault()
+    const code = codeInput.trim().toUpperCase()
+    if (!code) return
+    setCodeMessage(null)
+    setAppliedCode(code)
+  }
+
+  const removeCode = () => {
+    setAppliedCode(null)
+    setCodeInput('')
+    setCodeMessage(null)
+  }
+
+  const paymentDetails = () => ({ items: toOrderItems(items), giftWrap, couponCode: appliedCode, email: address.email })
+
+  useEffect(() => { clearOfferCode(); clearRecoveredContact() }, [])
 
   const handleAddressSubmit = (e) => {
     e.preventDefault()
     setStep(1)
+    // Save the bag with the email so it can be recovered if they don't finish.
+    // Best effort — checkout carries on regardless.
+    saveCheckoutCart({ token: getCartToken(), email: address.email, name: address.name, phone: address.phone, items: toOrderItems(items) }).catch(() => {})
   }
 
-  const finishOrder = async (paymentId, razorpayOrderId) => {
+  const finishOrder = async (payment) => {
     const order = await placeOrder({
-      items, address, subtotal, shipping, total, paymentId, razorpayOrderId,
-      giftWrap, giftNote: giftWrap ? giftNote : undefined, giftWrapFee,
+      items: toOrderItems(items),
+      address,
+      giftWrap,
+      giftNote: giftWrap ? giftNote : undefined,
+      couponCode: appliedCode,
+      cartToken: getCartToken(),
+      ...payment,
     })
     clearCart()
+    resetCartToken()
     navigate(`/order-confirmation/${order.id}`, { state: { order, address } })
   }
 
   const handlePayment = async () => {
     setProcessing(true)
+    if (paymentMethod === 'cod') {
+      try {
+        await finishOrder({ paymentMethod: 'cod', checkoutKey })
+      } catch (err) {
+        toast.error(err.message || 'Could not place your order. Please try again.')
+        setProcessing(false)
+      }
+      return
+    }
     try {
-      // Backend creates the Razorpay order first (or a mock order id if the
-      // backend has no Razorpay keys configured — see backend/.env.example).
-      const { razorpayOrderId, mock } = await createRazorpayOrder(total)
+      // The backend prices the bag itself and creates the Razorpay order for
+      // that amount (or a mock order id when it has no Razorpay keys — see
+      // backend/.env.example).
+      const { razorpayOrderId, amount, mock } = await createRazorpayOrder(paymentDetails())
 
       if (mock) {
         // No Razorpay keys on the backend — skip the real checkout widget
         // entirely (it would try to validate a fake order id against
         // Razorpay's servers and fail) and complete the order directly.
         await new Promise((r) => setTimeout(r, 1200))
-        await verifyPayment({ razorpay_order_id: razorpayOrderId })
-        await finishOrder(`pay_mock_${Date.now()}`, razorpayOrderId)
+        await finishOrder({ razorpay_order_id: razorpayOrderId, razorpay_payment_id: `pay_mock_${Date.now()}` })
         return
       }
 
       await initiatePayment({
-        amount: total,
+        amount,
         razorpayOrderId,
         customerName: address.name,
         customerEmail: address.email,
         customerPhone: address.phone,
         onSuccess: async (response) => {
+          const payment = {
+            razorpay_order_id: response.razorpay_order_id ?? razorpayOrderId,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          }
           try {
-            await verifyPayment({
-              razorpay_order_id: response.razorpay_order_id ?? razorpayOrderId,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            })
-            await finishOrder(response.razorpay_payment_id, razorpayOrderId)
+            await verifyPayment(payment)
+            await finishOrder(payment)
           } catch (err) {
             toast.error(err.message || 'Payment verification failed. Please contact support.')
             setProcessing(false)
@@ -149,7 +241,10 @@ export default function CheckoutPage() {
                 </div>
                 <div>
                   <label className="label-brand">State *</label>
-                  <input required value={address.state} onChange={(e) => setAddress((a) => ({ ...a, state: e.target.value }))} className="input-brand" />
+                  <select required value={address.state} onChange={(e) => setAddress((a) => ({ ...a, state: e.target.value }))} className="input-brand">
+                    <option value="" disabled>Select state</option>
+                    {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
                 </div>
                 <div>
                   <label className="label-brand">Pincode *</label>
@@ -171,8 +266,8 @@ export default function CheckoutPage() {
                     <img src={item.product.images[0]} alt={item.product.name} className="w-14 h-14 object-cover bg-cream-dark border border-border shrink-0" />
                     <div className="flex-1">
                       <p className="text-sm font-sans text-brown">{item.product.name}</p>
-                      {Object.keys(item.variant).length > 0 && (
-                        <p className="text-xs font-sans text-brown-mid">{Object.entries(item.variant).map(([k,v]) => `${k}: ${v}`).join(' · ')}</p>
+                      {formatVariant(item.variant).length > 0 && (
+                        <p className="text-xs font-sans text-brown-mid">{formatVariant(item.variant).join(' · ')}</p>
                       )}
                       <p className="text-sm font-sans text-brown-mid mt-0.5">Qty: {item.quantity}</p>
                     </div>
@@ -230,10 +325,11 @@ export default function CheckoutPage() {
           {step === 2 && (
             <div className="panel-brand p-6 space-y-4">
               <h2 className="font-serif text-xl text-brown">Payment</h2>
-              <div className="border border-border bg-cream-dark p-4">
+              <label className={`block border p-4 cursor-pointer transition-colors ${paymentMethod === 'online' ? 'border-brown bg-cream-dark' : 'border-border hover:border-brown-mid'}`}>
                 <div className="flex items-center gap-3 mb-3">
+                  <input type="radio" name="paymentMethod" checked={paymentMethod === 'online'} onChange={() => setPaymentMethod('online')} className="accent-brown" />
                   <img src="https://razorpay.com/favicon.png" alt="Razorpay" className="w-6 h-6" onError={(e)=>{e.currentTarget.style.display='none'}} />
-                  <span className="font-sans text-brown">Razorpay Secure Payment</span>
+                  <span className="font-sans text-brown">Pay online — Razorpay Secure</span>
                 </div>
                 <p className="text-sm font-sans font-light text-brown-mid mb-3">Pay using UPI, credit/debit card, net banking, wallets and more.</p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -248,11 +344,29 @@ export default function CheckoutPage() {
                     </div>
                   ))}
                 </div>
-              </div>
+              </label>
+
+              {quote?.codFeeSetting !== undefined && (quote.codAvailable || quote.codReason) && (
+                <label className={`block border p-4 transition-colors ${!quote.codAvailable ? 'opacity-60 cursor-not-allowed border-border' : paymentMethod === 'cod' ? 'border-brown bg-cream-dark cursor-pointer' : 'border-border hover:border-brown-mid cursor-pointer'}`}>
+                  <div className="flex items-center gap-3">
+                    <input type="radio" name="paymentMethod" checked={paymentMethod === 'cod'} disabled={!quote.codAvailable} onChange={() => setPaymentMethod('cod')} className="accent-brown" />
+                    <Banknote size={20} strokeWidth={1.5} className="text-brown" />
+                    <span className="font-sans text-brown">Cash on delivery</span>
+                    {quote.codAvailable && quote.codFeeSetting > 0 && <span className="ml-auto text-xs font-sans text-brown-mid">+{formatCurrency(quote.codFeeSetting)} fee</span>}
+                  </div>
+                  <p className="text-xs font-sans text-brown-mid mt-2 ml-7">
+                    {quote.codAvailable
+                      ? 'Pay in cash or UPI when your order arrives. We\'ll call to confirm your order before it ships.'
+                      : quote.codReason}
+                  </p>
+                </label>
+              )}
 
               <div className="flex items-center gap-2 text-xs font-sans text-brown-mid">
                 <ShieldCheck size={14} className="text-brown" />
-                Your payment is 100% secure. We never store card details.
+                {paymentMethod === 'cod'
+                  ? 'Please keep the exact amount ready — our courier partners may not carry change.'
+                  : 'Your payment is 100% secure. We never store card details.'}
               </div>
 
               <div className="flex gap-3">
@@ -264,7 +378,7 @@ export default function CheckoutPage() {
                   disabled={processing}
                   className="flex-1 btn-brand-primary"
                 >
-                  {processing ? 'Processing…' : `Pay ${formatCurrency(total)}`}
+                  {processing ? 'Processing…' : paymentMethod === 'cod' ? `Place order · pay ${formatCurrency(total)} on delivery` : `Pay ${formatCurrency(total)}`}
                 </button>
               </div>
             </div>
@@ -288,6 +402,12 @@ export default function CheckoutPage() {
                 <span>Subtotal</span>
                 <span>{formatCurrency(subtotal)}</span>
               </div>
+              {discount > 0 && (
+                <div className="flex justify-between text-brown">
+                  <span className="flex items-center gap-1.5"><Tag size={12} strokeWidth={1.5} /> {quote?.discountLabel || 'Discount'}</span>
+                  <span>−{formatCurrency(discount)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-brown-mid">
                 <span>Shipping</span>
                 <span>{shipping === 0 ? 'FREE' : formatCurrency(shipping)}</span>
@@ -298,10 +418,40 @@ export default function CheckoutPage() {
                   <span>{formatCurrency(giftWrapFee)}</span>
                 </div>
               )}
+              {quote?.codFee > 0 && (
+                <div className="flex justify-between text-brown-mid">
+                  <span>Cash-on-delivery fee</span>
+                  <span>{formatCurrency(quote.codFee)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-brown text-base border-t border-border pt-2">
                 <span>Total</span>
                 <span>{formatCurrency(total)}</span>
               </div>
+            </div>
+
+            {/* Promo code */}
+            <div className="border-t border-border mt-4 pt-4">
+              {appliedCode && quote?.discountCode === appliedCode ? (
+                <div className="flex items-center justify-between text-sm font-sans">
+                  <span className="flex items-center gap-1.5 text-brown"><Tag size={13} strokeWidth={1.5} /> {appliedCode} applied</span>
+                  <button type="button" onClick={removeCode} aria-label="Remove code" className="text-brown-mid hover:text-brown"><X size={14} /></button>
+                </div>
+              ) : (
+                <form onSubmit={applyCode} className="flex gap-2">
+                  <input
+                    value={codeInput}
+                    onChange={(e) => { setCodeInput(e.target.value); if (codeMessage?.tone === 'error') setCodeMessage(null) }}
+                    placeholder="Promo code"
+                    aria-label="Promo code"
+                    className="input-brand flex-1 uppercase placeholder:normal-case"
+                  />
+                  <button type="submit" disabled={!codeInput.trim()} className="btn-brand-secondary px-4">Apply</button>
+                </form>
+              )}
+              {codeMessage && (
+                <p className={`text-xs font-sans mt-2 ${codeMessage.tone === 'error' ? 'text-red-700' : 'text-brown-mid'}`}>{codeMessage.text}</p>
+              )}
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ShoppingCart, Zap, Heart, CheckCircle, Truck, ZoomIn, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ShoppingCart, Zap, Heart, CheckCircle, Truck, ZoomIn, X, ChevronLeft, ChevronRight, Scissors } from 'lucide-react'
 import StarRating from '@/components/ui/StarRating'
 import { DiscountBadge } from '@/components/ui/Badge'
 import { formatCurrency } from '@/utils/formatCurrency'
@@ -10,6 +10,8 @@ import useAuthStore from '@/store/authStore'
 import useWishlistStore from '@/store/wishlistStore'
 import ProductCard from '@/components/customer/ProductCard'
 import toast from 'react-hot-toast'
+import useDocumentMeta from '@/utils/useDocumentMeta'
+import useSettingsStore from '@/store/settingsStore'
 
 // Care guidance by material — genuine, general leather-care knowledge rather
 // than fabricated per-product specifics (there's no real data source for the
@@ -67,6 +69,7 @@ export default function ProductDetailPage() {
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [selectedVariant, setSelectedVariant] = useState({})
   const [qty, setQty] = useState(1)
+  const [customLeather, setCustomLeather] = useState('') // '' = the bag's standard leather
   const [tab, setTab] = useState('description')
   const [reviewForm, setReviewForm] = useState({ rating: 5, title: '', body: '' })
   const [submittingReview, setSubmittingReview] = useState(false)
@@ -76,6 +79,13 @@ export default function ProductDetailPage() {
   const { addItem, openCart } = useCartStore()
   const { isLoggedIn, user } = useAuthStore()
   const inWishlist = useWishlistStore((s) => (product ? s.isInWishlist(product.id) : false))
+  const storeName = useSettingsStore((s) => s.storeName)
+  const { customisationEnabled, customLeathers, customisationNote } = useSettingsStore()
+  // Search-engine title/description, editable per product in the admin
+  useDocumentMeta(
+    product ? `${product.metaTitle || product.name} | ${storeName}` : null,
+    product ? (product.metaDescription || product.description) : null,
+  )
   const toggleWishlist = useWishlistStore((s) => s.toggleItem)
 
   useEffect(() => {
@@ -91,13 +101,12 @@ export default function ProductDetailPage() {
           setReviews(r)
           setLoading(false)
         })
-        // Default variant selections — support both top-level colors and variants.colors
-        const defaults = {}
-        const colors = p.colors || p.variants?.colors
-        const sizes  = p.variants?.sizes
-        if (colors?.length) defaults.color = colors[0]
-        if (sizes?.length)  defaults.size  = sizes[0]
-        setSelectedVariant(defaults)
+        // Default selection: the first variant that's in stock (else the first)
+        const vs = p.variants ?? []
+        const first = vs.find((v) => v.stock > 0) ?? vs[0]
+        setSelectedVariant(first ? { color: first.color, size: first.size } : (p.colors?.length ? { color: p.colors[0] } : {}))
+        setQty(1)
+        setCustomLeather('')
         // "Complete the Look" — other pieces from the same category, not the product itself
         getProducts({ category: p.categoryId }).then((all) => {
           setRelated((Array.isArray(all) ? all : []).filter((x) => x.id !== p.id).slice(0, 4))
@@ -142,14 +151,53 @@ export default function ProductDetailPage() {
     toast.success(added ? 'Saved to wishlist' : 'Removed from wishlist')
   }
 
+  // ── Variants ── each colour/size combination has its own stock
+  const variants = product?.variants ?? []
+  const hasVariants = variants.length > 0
+  const colorOptions = hasVariants ? [...new Set(variants.map((v) => v.color).filter(Boolean))] : (product?.colors ?? [])
+  const sizeOptions = [...new Set(variants.map((v) => v.size).filter(Boolean))]
+  const chosen = hasVariants
+    ? variants.find((v) => v.color === (selectedVariant.color ?? '') && v.size === (selectedVariant.size ?? ''))
+    : null
+  const available = hasVariants ? (chosen?.stock ?? 0) : (product?.stock ?? 0)
+  const inStockWith = (match) => variants.some((v) => match(v) && v.stock > 0)
+
+  const chooseColor = (color) => {
+    // Keep the size if that combination exists, else jump to the best size for this colour
+    const sameSize = variants.find((v) => v.color === color && v.size === (selectedVariant.size ?? ''))
+    const fallback = variants.find((v) => v.color === color && v.stock > 0) ?? variants.find((v) => v.color === color)
+    const next = sameSize ?? fallback
+    setSelectedVariant(next ? { color: next.color, size: next.size } : { ...selectedVariant, color })
+    setQty(1)
+  }
+  const chooseSize = (size) => {
+    setSelectedVariant((v) => ({ ...v, size }))
+    setQty(1)
+  }
+
+  // ── Free customisation: the same bag made in another leather, at no charge
+  const leatherOptions = String(customLeathers ?? '')
+    .split(',')
+    .map((l) => l.trim())
+    .filter((l) => l && l.toLowerCase() !== (product?.material ?? '').toLowerCase())
+  const canCustomise = !!product && customisationEnabled && product.allowCustomisation !== false && leatherOptions.length > 0
+
+  // Only the attributes that matter, e.g. { color: 'Tan' } — shown in the bag
+  const baseVariant = hasVariants
+    ? Object.fromEntries(Object.entries({ color: chosen?.color, size: chosen?.size }).filter(([, v]) => v))
+    : selectedVariant
+  const variantForCart = canCustomise && customLeather ? { ...baseVariant, leather: customLeather } : baseVariant
+
+  const addToBag = () => addItem(product, Math.min(qty, available), variantForCart, chosen?.id)
+
   const handleAddToCart = () => {
-    addItem(product, qty, selectedVariant)
+    addToBag()
     openCart()
     toast.success('Added to cart!')
   }
 
   const handleBuyNow = () => {
-    addItem(product, qty, selectedVariant)
+    addToBag()
     window.location.href = '/checkout'
   }
 
@@ -252,10 +300,12 @@ export default function ProductDetailPage() {
           <div className="flex items-center gap-3">
             <StarRating rating={product.rating} size={16} showValue />
             <span className="text-xs font-sans text-brown-mid">({reviews.length} review{reviews.length === 1 ? '' : 's'})</span>
-            {product.stock > 0 ? (
-              <span className="text-xs font-sans text-brown-mid flex items-center gap-1"><CheckCircle size={13} /> In Stock</span>
+            {available > 0 ? (
+              <span className="text-xs font-sans text-brown-mid flex items-center gap-1">
+                <CheckCircle size={13} /> {available <= 5 ? `Only ${available} left` : 'In Stock'}
+              </span>
             ) : (
-              <span className="text-xs font-sans text-red-500">Out of Stock</span>
+              <span className="text-xs font-sans text-red-500">{hasVariants && product.stock > 0 ? 'This option is sold out' : 'Out of Stock'}</span>
             )}
           </div>
 
@@ -275,58 +325,90 @@ export default function ProductDetailPage() {
           )}
 
           {/* Variants */}
-          {(product.colors?.length > 0 || product.variants?.colors?.length > 0) && (
+          {colorOptions.length > 0 && (
             <div>
               <p className="label-brand">
                 Color — <span className="normal-case text-brown">{selectedVariant.color}</span>
               </p>
               <div className="flex flex-wrap gap-2">
-                {(product.colors?.length ? product.colors : product.variants?.colors ?? []).map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setSelectedVariant((v) => ({ ...v, color: c }))}
-                    className={`px-3 py-1.5 border text-xs font-sans transition-colors ${selectedVariant.color === c ? 'border-brown bg-brown text-cream' : 'border-border text-brown hover:border-brown-mid'}`}
-                  >
-                    {c}
-                  </button>
-                ))}
+                {colorOptions.map((c) => {
+                  const soldOut = hasVariants && !inStockWith((v) => v.color === c)
+                  return (
+                    <button
+                      key={c}
+                      onClick={() => chooseColor(c)}
+                      title={soldOut ? 'Sold out' : undefined}
+                      className={`px-3 py-1.5 border text-xs font-sans transition-colors ${selectedVariant.color === c ? 'border-brown bg-brown text-cream' : 'border-border text-brown hover:border-brown-mid'} ${soldOut ? 'line-through opacity-50' : ''}`}
+                    >
+                      {c}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
 
-          {product.variants?.sizes && (
+          {sizeOptions.length > 0 && (
             <div>
               <p className="label-brand">
                 Size — <span className="normal-case text-brown">{selectedVariant.size}</span>
               </p>
               <div className="flex flex-wrap gap-2">
-                {product.variants.sizes.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setSelectedVariant((v) => ({ ...v, size: s }))}
-                    className={`w-10 h-10 border text-xs font-sans transition-colors ${selectedVariant.size === s ? 'border-brown bg-brown text-cream' : 'border-border text-brown hover:border-brown-mid'}`}
-                  >
-                    {s}
-                  </button>
-                ))}
+                {sizeOptions.map((sz) => {
+                  const exists = variants.some((v) => v.size === sz && v.color === (selectedVariant.color ?? ''))
+                  const soldOut = !inStockWith((v) => v.size === sz && v.color === (selectedVariant.color ?? ''))
+                  return (
+                    <button
+                      key={sz}
+                      onClick={() => chooseSize(sz)}
+                      disabled={!exists}
+                      title={!exists ? 'Not available in this colour' : soldOut ? 'Sold out' : undefined}
+                      className={`min-w-10 h-10 px-2 border text-xs font-sans transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${selectedVariant.size === sz ? 'border-brown bg-brown text-cream' : 'border-border text-brown hover:border-brown-mid'} ${soldOut && exists ? 'line-through opacity-50' : ''}`}
+                    >
+                      {sz}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
 
-          {product.variants?.layouts && (
-            <div>
-              <p className="label-brand">Layout</p>
-              <div className="flex gap-2">
-                {product.variants.layouts.map((l) => (
+          {/* Free customisation — change the leather */}
+          {canCustomise && (
+            <div className="border border-border bg-cream-dark/40 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="flex items-center gap-2 text-[11px] tracking-luxury font-sans uppercase text-brown">
+                  <Scissors size={14} strokeWidth={1.5} /> Customisation
+                </p>
+                <span className="text-[10px] tracking-luxury font-sans uppercase bg-brown text-cream px-2 py-0.5">Free</span>
+              </div>
+              <p className="mt-2 text-[12px] font-sans font-light text-brown-mid">
+                Love the design in a different leather? Choose it here — no extra charge.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Leather">
+                <button
+                  role="radio"
+                  aria-checked={!customLeather}
+                  onClick={() => setCustomLeather('')}
+                  className={`px-3 py-1.5 border text-xs font-sans transition-colors ${!customLeather ? 'border-brown bg-brown text-cream' : 'border-border bg-cream text-brown hover:border-brown-mid'}`}
+                >
+                  Standard{product.material ? ` · ${product.material}` : ''}
+                </button>
+                {leatherOptions.map((l) => (
                   <button
                     key={l}
-                    onClick={() => setSelectedVariant((v) => ({ ...v, layout: l }))}
-                    className={`px-3 py-1.5 border text-xs font-sans transition-colors ${selectedVariant.layout === l ? 'border-brown bg-brown text-cream' : 'border-border text-brown hover:border-brown-mid'}`}
+                    role="radio"
+                    aria-checked={customLeather === l}
+                    onClick={() => setCustomLeather(l)}
+                    className={`px-3 py-1.5 border text-xs font-sans transition-colors ${customLeather === l ? 'border-brown bg-brown text-cream' : 'border-border bg-cream text-brown hover:border-brown-mid'}`}
                   >
                     {l}
                   </button>
                 ))}
               </div>
+              {customLeather && customisationNote && (
+                <p className="mt-3 text-[11px] font-sans text-brown">{customisationNote}</p>
+              )}
             </div>
           )}
 
@@ -336,23 +418,23 @@ export default function ProductDetailPage() {
             <div className="flex items-center border border-border">
               <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="px-3 py-2 hover:bg-cream-dark text-brown transition-colors">−</button>
               <span className="px-4 py-2 text-sm font-sans border-x border-border text-brown">{qty}</span>
-              <button onClick={() => setQty((q) => Math.min(product.stock, q + 1))} className="px-3 py-2 hover:bg-cream-dark text-brown transition-colors">+</button>
+              <button onClick={() => setQty((q) => Math.min(available, q + 1))} className="px-3 py-2 hover:bg-cream-dark text-brown transition-colors">+</button>
             </div>
-            <span className="text-[11px] font-sans text-brown-mid">{product.stock} available</span>
+            <span className="text-[11px] font-sans text-brown-mid">{available} available</span>
           </div>
 
           {/* CTA buttons */}
           <div ref={ctaRef} className="flex gap-3">
             <button
               onClick={handleAddToCart}
-              disabled={product.stock === 0}
+              disabled={available === 0}
               className="flex-1 flex items-center justify-center gap-2 btn-brand-secondary"
             >
               <ShoppingCart size={16} /> Add to Cart
             </button>
             <button
               onClick={handleBuyNow}
-              disabled={product.stock === 0}
+              disabled={available === 0}
               className="flex-1 flex items-center justify-center gap-2 btn-brand-primary"
             >
               <Zap size={16} /> Buy Now
@@ -382,12 +464,12 @@ export default function ProductDetailPage() {
 
       {/* Tabs */}
       <div>
-        <div className="flex border-b border-border">
+        <div className="flex border-b border-border overflow-x-auto no-scrollbar">
           {['description', 'features', 'care', 'reviews'].map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`px-6 py-3 text-[11px] tracking-luxury font-sans uppercase transition-colors border-b-2 -mb-px ${tab === t ? 'border-brown text-brown' : 'border-transparent text-brown-mid hover:text-brown'}`}
+              className={`shrink-0 px-3 sm:px-6 py-3 text-[11px] tracking-luxury font-sans uppercase transition-colors border-b-2 -mb-px ${tab === t ? 'border-brown text-brown' : 'border-transparent text-brown-mid hover:text-brown'}`}
             >
               {t}{t === 'reviews' && ` (${reviews.length})`}
             </button>
@@ -552,7 +634,7 @@ export default function ProductDetailPage() {
         </div>
         <button
           onClick={handleAddToCart}
-          disabled={product.stock === 0}
+          disabled={available === 0}
           className="btn-brand-primary flex items-center gap-2 shrink-0"
         >
           <ShoppingCart size={15} /> Add to Cart

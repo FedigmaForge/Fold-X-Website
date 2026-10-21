@@ -4,12 +4,15 @@ import { CheckCircle, Package, ArrowRight } from 'lucide-react'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { getOrderPublic } from '@/services/api'
 import OrderTimeline from '@/components/customer/OrderTimeline'
+import { customisedItems } from '@/utils/formatVariant'
+import useSettingsStore from '@/store/settingsStore'
 
 export default function OrderConfirmationPage() {
   const { orderId } = useParams()
   const { state } = useLocation()
   const [order, setOrder] = useState(state?.order ?? null)
   const [address, setAddress] = useState(state?.address ?? null)
+  const customisationNote = useSettingsStore((s) => s.customisationNote)
 
   useEffect(() => {
     // Refreshing this page (or opening the link directly) loses router state —
@@ -47,8 +50,19 @@ export default function OrderConfirmationPage() {
           </div>
           {order?.total && (
             <div className="flex justify-between text-sm font-sans">
-              <span className="text-brown-mid">Amount Paid</span>
+              <span className="text-brown-mid">{order.paymentMethod === 'cod' ? 'To pay on delivery' : 'Amount Paid'}</span>
               <span className="text-brown">{formatCurrency(order.total)}</span>
+            </div>
+          )}
+          {order?.paymentMethod === 'cod' && (
+            <p className="text-xs font-sans text-brown-mid border-l-2 border-gold pl-3">
+              Cash on delivery: we'll call you shortly to confirm your order before it ships. Please keep the exact amount ready when it arrives — you can pay by cash or UPI.
+            </p>
+          )}
+          {order?.discount > 0 && (
+            <div className="flex justify-between text-sm font-sans">
+              <span className="text-brown-mid">You saved</span>
+              <span className="text-brown">{formatCurrency(order.discount)}</span>
             </div>
           )}
           {address && (
@@ -59,9 +73,19 @@ export default function OrderConfirmationPage() {
           )}
           <div className="flex justify-between text-sm font-sans">
             <span className="text-brown-mid">Estimated Delivery</span>
-            <span className="text-brown">3–5 business days</span>
+            <span className="text-brown">{customisedItems(order?.items).length ? 'Made to order — see below' : '3–5 business days'}</span>
           </div>
         </div>
+
+        {customisedItems(order?.items).length > 0 && (
+          <div className="text-left text-xs font-sans text-brown-mid bg-cream-dark p-3 border border-border space-y-1">
+            <p className="text-[10px] tracking-luxury uppercase text-brown">Your free customisation</p>
+            {customisedItems(order.items).map((i) => (
+              <p key={i.id ?? i.product.id}><span className="text-brown">{i.product.name}</span> — in {i.variant.leather}</p>
+            ))}
+            {customisationNote && <p className="pt-1">{customisationNote}</p>}
+          </div>
+        )}
 
         {order?.giftWrap && (
           <div className="text-left text-xs font-sans text-brown-mid bg-cream-dark p-3 border border-border">

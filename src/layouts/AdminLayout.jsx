@@ -14,12 +14,12 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="admin-theme flex h-screen bg-cream overflow-hidden">
       <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
-        <header className="bg-white border-b border-gray-100 px-6 py-3 flex items-center gap-4 shrink-0">
+        <header className="bg-white border-b border-border px-6 py-3 flex items-center gap-4 shrink-0">
           <button
             onClick={() => setMobileOpen(true)}
             className="lg:hidden p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
@@ -31,13 +31,13 @@ export default function AdminLayout() {
             href="/"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-violet-600 transition-colors"
+            className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.2em] text-brown-mid hover:text-brown transition-colors"
           >
             <ExternalLink size={14} /> View Store
           </a>
           <button className="relative p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
             <Bell size={18} className="text-gray-500" />
-            <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full" />
+            <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-gold rounded-full" />
           </button>
         </header>
 
@@ -50,8 +50,8 @@ export default function AdminLayout() {
       <Toaster
         position="top-right"
         toastOptions={{
-          style: { borderRadius: '12px', fontSize: '14px' },
-          success: { iconTheme: { primary: '#7c3aed', secondary: '#fff' } },
+          style: { borderRadius: '2px', fontSize: '14px', fontFamily: "'Jost', system-ui, sans-serif", color: '#2C1810', border: '1px solid #E8DDD4' },
+          success: { iconTheme: { primary: '#2C1810', secondary: '#FAF7F4' } },
         }}
       />
     </div>

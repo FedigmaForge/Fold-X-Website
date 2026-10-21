@@ -3,7 +3,6 @@ const bcrypt = require('bcryptjs')
 const prisma = require('../lib/prisma')
 const { signToken } = require('../lib/jwt')
 const { asyncRoute, HttpError } = require('../middleware/errorHandler')
-const { ADMIN_ROLES } = require('../lib/roles')
 
 const router = Router()
 
@@ -34,29 +33,20 @@ router.post('/auth/login', asyncRoute(async (req, res) => {
   if (!email || !password) throw new HttpError(400, 'email and password are required')
 
   const user = await prisma.user.findUnique({ where: { email } })
-  if (!user || !user.isActive) throw new HttpError(401, 'Invalid credentials')
+  // Staff must sign in through the admin login, which enforces two-step
+  // login — otherwise this route would hand out a staff session without it
+  if (!user || user.role !== 'customer') throw new HttpError(401, 'Invalid credentials')
 
   const valid = await bcrypt.compare(password, user.passwordHash)
   if (!valid) throw new HttpError(401, 'Invalid credentials')
+  // Only after the password checks out, so this never reveals to a stranger
+  // whether an account exists
+  if (!user.isActive) throw new HttpError(403, 'This account has been suspended. Please contact us for help.')
 
   const token = signToken(user)
   res.json({ user: toPublicUser(user), token })
 }))
 
-// POST /api/admin/auth/login
-router.post('/admin/auth/login', asyncRoute(async (req, res) => {
-  const { email, password } = req.body
-  if (!email || !password) throw new HttpError(400, 'email and password are required')
-
-  const user = await prisma.user.findUnique({ where: { email } })
-  if (!user || !ADMIN_ROLES.includes(user.role)) throw new HttpError(401, 'Invalid credentials')
-  if (!user.isActive) throw new HttpError(401, 'This account has been deactivated')
-
-  const valid = await bcrypt.compare(password, user.passwordHash)
-  if (!valid) throw new HttpError(401, 'Invalid credentials')
-
-  const token = signToken(user)
-  res.json({ user: toPublicUser(user), token })
-}))
+// Staff sign-in (with two-step login) lives in staffAuth.routes.js
 
 module.exports = router

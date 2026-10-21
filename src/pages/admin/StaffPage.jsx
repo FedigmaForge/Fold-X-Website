@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { ShieldCheck, Plus, Ban, CheckCircle2 } from 'lucide-react'
+import { ShieldCheck, Plus, Ban, CheckCircle2, Smartphone, RotateCcw } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import { formatDate } from '@/utils/formatDate'
-import { getStaff, createStaff, updateStaff } from '@/services/api'
+import { getStaff, createStaff, updateStaff, resetStaff2fa, getAdminSettings, updateSettings } from '@/services/api'
 import useAuthStore from '@/store/authStore'
 import toast from 'react-hot-toast'
 
@@ -84,10 +84,12 @@ export default function StaffPage() {
   const [loading, setLoading] = useState(true)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [updatingId, setUpdatingId] = useState(null)
+  const [require2FA, setRequire2FA] = useState(false)
 
   useEffect(() => {
     if (currentUser?.role !== 'superadmin') return
     getStaff().then((s) => { setStaff(s); setLoading(false) }).catch(() => setLoading(false))
+    getAdminSettings().then((st) => setRequire2FA(!!st.require2FA)).catch(() => {})
   }, [currentUser])
 
   if (currentUser?.role !== 'superadmin') {
@@ -125,6 +127,33 @@ export default function StaffPage() {
     }
   }
 
+  const handleRequire2FA = async (on) => {
+    if (on && !confirm('Require two-step login for all staff? Anyone without it — including you — will be asked to set it up the next time they sign in.')) return
+    try {
+      await updateSettings({ require2FA: on })
+      setRequire2FA(on)
+      toast.success(on ? 'Two-step login is now required for all staff' : 'Two-step login is now optional')
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
+  const handleReset2FA = async (member) => {
+    if (!confirm(`Reset two-step login for ${member.name}? Use this if they lost their phone and backup codes. They'll set it up again at their next sign-in${require2FA ? '' : ' (or can skip it, since it isn\u2019t required)'}.`)) return
+    setUpdatingId(member.id)
+    try {
+      await resetStaff2fa(member.id)
+      setStaff((s) => s.map((m) => (m.id === member.id ? { ...m, twoFactorEnabled: false } : m)))
+      toast.success(`Two-step login reset for ${member.name}`)
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setUpdatingId(null)
+    }
+  }
+
+  const without2FA = staff.filter((m) => m.isActive && !m.twoFactorEnabled).length
+
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between">
@@ -140,6 +169,19 @@ export default function StaffPage() {
         </button>
       </div>
 
+      <div className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-wrap items-center gap-4">
+        <Smartphone size={20} className="text-gray-400" />
+        <div className="flex-1 min-w-[16rem]">
+          <p className="text-sm font-medium text-gray-800">Require two-step login for all staff</p>
+          <p className="text-xs text-gray-500">
+            {without2FA === 0 ? 'Every active staff member has it on.' : `${without2FA} active staff member${without2FA === 1 ? ' doesn\u2019t' : 's don\u2019t'} have it yet — they'll be asked to set it up at their next sign-in.`}
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+          <input type="checkbox" checked={require2FA} onChange={(e) => handleRequire2FA(e.target.checked)} /> Required
+        </label>
+      </div>
+
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -149,13 +191,14 @@ export default function StaffPage() {
                 <th className="text-left px-5 py-3">Role</th>
                 <th className="text-left px-5 py-3">Joined</th>
                 <th className="text-left px-5 py-3">Status</th>
+                <th className="text-left px-5 py-3">Two-step login</th>
                 <th className="text-right px-5 py-3">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {loading ? (
                 Array.from({ length: 3 }).map((_, i) => (
-                  <tr key={i}><td colSpan={5} className="px-5 py-4"><div className="h-4 bg-gray-200 animate-pulse rounded" /></td></tr>
+                  <tr key={i}><td colSpan={6} className="px-5 py-4"><div className="h-4 bg-gray-200 animate-pulse rounded" /></td></tr>
                 ))
               ) : staff.map((m) => {
                 const isSelf = m.id === currentUser.id
@@ -181,7 +224,17 @@ export default function StaffPage() {
                         {m.isActive ? 'Active' : 'Deactivated'}
                       </span>
                     </td>
+                    <td className="px-5 py-4">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${m.twoFactorEnabled ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {m.twoFactorEnabled ? 'On' : 'Off'}
+                      </span>
+                    </td>
                     <td className="px-5 py-4 text-right">
+                      {m.twoFactorEnabled && !isSelf && (
+                        <button onClick={() => handleReset2FA(m)} disabled={updatingId === m.id} title="Reset two-step login (lost phone)" className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 disabled:opacity-50 mr-1">
+                          <RotateCcw size={15} />
+                        </button>
+                      )}
                       {!isSelf && (
                         <button
                           onClick={() => handleToggleActive(m)}

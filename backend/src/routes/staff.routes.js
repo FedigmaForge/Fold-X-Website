@@ -9,7 +9,7 @@ const { ADMIN_ROLES, ROLE_LABELS } = require('../lib/roles')
 const router = Router()
 
 function toPublicStaff(u) {
-  return { id: u.id, name: u.name, email: u.email, role: u.role, isActive: u.isActive, createdAt: u.createdAt }
+  return { id: u.id, name: u.name, email: u.email, role: u.role, isActive: u.isActive, createdAt: u.createdAt, twoFactorEnabled: u.twoFactorEnabled }
 }
 
 // Staff management is superadmin-only — a manager/support account should

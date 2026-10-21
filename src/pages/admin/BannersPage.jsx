@@ -4,6 +4,7 @@ import BannerUploader from '@/components/admin/BannerUploader'
 import Modal from '@/components/ui/Modal'
 import { getAllBanners, saveBanner, deleteBanner } from '@/services/api'
 import toast from 'react-hot-toast'
+import { usePermissions } from '@/utils/permissions'
 
 const emptyBanner = { title: '', label: '', link: '', desktopImage: null, mobileImage: null, isActive: true, order: 1 }
 
@@ -14,6 +15,7 @@ export default function BannersPage() {
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(emptyBanner)
   const [saving, setSaving] = useState(false)
+  const { canEditCatalog } = usePermissions()
 
   useEffect(() => {
     getAllBanners().then((b) => { setBanners(b); setLoading(false) })
@@ -40,28 +42,41 @@ export default function BannersPage() {
       desktopImage: form.desktopImage?.url || form.desktopImage || '',
       mobileImage: form.mobileImage?.url || form.mobileImage || '',
     }
-    const saved = await saveBanner(payload)
-    if (editing) {
-      setBanners((bs) => bs.map((b) => (b.id === editing.id ? { ...b, ...saved } : b)))
-    } else {
-      setBanners((bs) => [...bs, saved])
+    try {
+      const saved = await saveBanner(payload)
+      if (editing) {
+        setBanners((bs) => bs.map((b) => (b.id === editing.id ? { ...b, ...saved } : b)))
+      } else {
+        setBanners((bs) => [...bs, saved])
+      }
+      toast.success(editing ? 'Banner updated!' : 'Banner created!')
+      setModalOpen(false)
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setSaving(false)
     }
-    toast.success(editing ? 'Banner updated!' : 'Banner created!')
-    setModalOpen(false)
-    setSaving(false)
   }
 
   const handleDelete = async (id, title) => {
     if (!confirm(`Delete banner "${title}"?`)) return
-    await deleteBanner(id)
-    setBanners((bs) => bs.filter((b) => b.id !== id))
-    toast.success('Banner deleted')
+    try {
+      await deleteBanner(id)
+      setBanners((bs) => bs.filter((b) => b.id !== id))
+      toast.success('Banner deleted')
+    } catch (err) {
+      toast.error(err.message)
+    }
   }
 
   const toggleActive = async (banner) => {
     const updated = { ...banner, isActive: !banner.isActive }
-    await saveBanner(updated)
-    setBanners((bs) => bs.map((b) => (b.id === banner.id ? updated : b)))
+    try {
+      await saveBanner(updated)
+      setBanners((bs) => bs.map((b) => (b.id === banner.id ? updated : b)))
+    } catch (err) {
+      toast.error(err.message)
+    }
   }
 
   return (
@@ -69,14 +84,17 @@ export default function BannersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Banners</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Manage homepage carousel banners</p>
+          <p className="text-sm text-gray-400 mt-0.5">
+            {canEditCatalog ? 'Manage homepage carousel banners' : 'Homepage carousel banners · view only for your role'}
+            {' · '}If none is active, the homepage shows FoldX's built-in slides.
+          </p>
         </div>
-        <button
+        {canEditCatalog && <button
           onClick={openNew}
           className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
         >
           <Plus size={16} /> Add Banner
-        </button>
+        </button>}
       </div>
 
       {/* Dimension guide */}
@@ -97,7 +115,7 @@ export default function BannersPage() {
       ) : banners.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
           <p className="text-gray-400 mb-3">No banners yet</p>
-          <button onClick={openNew} className="text-sm text-violet-600 hover:underline">Add your first banner</button>
+          {canEditCatalog && <button onClick={openNew} className="text-sm text-violet-600 hover:underline">Add your first banner</button>}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -118,7 +136,7 @@ export default function BannersPage() {
                   <p className="text-xs text-gray-400">Order: #{b.order}</p>
                   {b.link && <p className="text-xs text-violet-600 truncate max-w-[140px]">{b.link}</p>}
                 </div>
-                <div className="flex gap-1.5">
+                {canEditCatalog && <div className="flex gap-1.5">
                   <button onClick={() => toggleActive(b)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title={b.isActive ? 'Hide' : 'Show'}>
                     {b.isActive ? <EyeOff size={15} className="text-gray-400" /> : <Eye size={15} className="text-green-500" />}
                   </button>
@@ -128,7 +146,7 @@ export default function BannersPage() {
                   <button onClick={() => handleDelete(b.id, b.title)} className="p-1.5 rounded-lg hover:bg-red-100 text-red-500 transition-colors">
                     <Trash2 size={15} />
                   </button>
-                </div>
+                </div>}
               </div>
             </div>
           ))}

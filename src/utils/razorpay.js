@@ -30,7 +30,7 @@ export async function initiatePayment({ amount, razorpayOrderId, customerName, c
     currency: 'INR',
     name: 'FoldX',
     description: 'Order Payment',
-    image: '/favicon.svg',
+    image: '/icon-192.png', // FoldX emblem in the payment window
     order_id: razorpayOrderId,
     handler: (response) => {
       // response = { razorpay_payment_id, razorpay_order_id, razorpay_signature }

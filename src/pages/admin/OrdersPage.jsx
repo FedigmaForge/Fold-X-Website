@@ -1,45 +1,96 @@
 import { useState, useEffect } from 'react'
-import { Search, Eye, Gift } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Search, Gift, Download, ChevronRight, X, Truck, Scissors } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/Badge'
-import Modal from '@/components/ui/Modal'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate } from '@/utils/formatDate'
-import { getOrders, updateOrderStatus } from '@/services/api'
+import { getOrders, downloadOrdersCsv } from '@/services/api'
 import toast from 'react-hot-toast'
 
 const STATUS_TABS = ['all', 'pending', 'processing', 'shipped', 'delivered', 'cancelled']
+// Payment method, incl. COD orders nobody has confirmed with the customer yet
+const METHOD_FILTERS = [
+  { value: 'all', label: 'All methods' },
+  { value: 'online', label: 'Paid online' },
+  { value: 'cod', label: 'Cash on delivery' },
+  { value: 'cod_unconfirmed', label: 'COD — to confirm' },
+]
+
+const PAYMENT_FILTERS = [
+  { value: 'all', label: 'All payments' },
+  { value: 'paid', label: 'Paid' },
+  { value: 'pending', label: 'Payment pending' },
+  { value: 'partially_refunded', label: 'Partly refunded' },
+  { value: 'refunded', label: 'Refunded' },
+]
 
 export default function OrdersPage() {
-  const [orders, setOrders] = useState([])
-  const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
+  // Results are tagged with the filter key they were fetched for, so "loading"
+  // is derived (key mismatch) rather than toggled inside the effect.
+  const [result, setResult] = useState({ key: null, orders: [] })
+  const [exporting, setExporting] = useState(false)
   const [activeTab, setActiveTab] = useState('all')
+  const [paymentStatus, setPaymentStatus] = useState('all')
+  // ?method=cod_unconfirmed deep-links straight to COD orders awaiting confirmation
+  const [paymentMethod, setPaymentMethod] = useState(() => new URLSearchParams(window.location.search).get('method') || 'all')
+  // ?customised=1 deep-links to orders with a free leather change
+  const [customised, setCustomised] = useState(() => new URLSearchParams(window.location.search).get('customised') === '1')
   const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState(null)
-  const [updating, setUpdating] = useState(false)
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
 
   useEffect(() => {
-    getOrders({ status: activeTab }).then((o) => { setOrders(o); setLoading(false) })
-  }, [activeTab])
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300)
+    return () => clearTimeout(t)
+  }, [search])
 
-  const filtered = orders.filter((o) =>
-    o.id.toLowerCase().includes(search.toLowerCase()) ||
-    o.customerName.toLowerCase().includes(search.toLowerCase())
-  )
+  const filters = { status: activeTab, paymentStatus, paymentMethod, q: debouncedSearch, from, to, customised: customised ? '1' : '' }
+  const filterKey = JSON.stringify(filters)
+  const loading = result.key !== filterKey
+  const orders = result.orders
 
-  const handleStatusUpdate = async (orderId, status) => {
-    setUpdating(true)
-    await updateOrderStatus(orderId, status)
-    setOrders((os) => os.map((o) => o.id === orderId ? { ...o, status } : o))
-    if (selected?.id === orderId) setSelected((s) => ({ ...s, status }))
-    toast.success('Order status updated')
-    setUpdating(false)
+  useEffect(() => {
+    let stale = false
+    getOrders(JSON.parse(filterKey))
+      .then((o) => { if (!stale) setResult({ key: filterKey, orders: o }) })
+      .catch((e) => { if (!stale) { toast.error(e.message); setResult({ key: filterKey, orders: [] }) } })
+    return () => { stale = true }
+  }, [filterKey])
+
+  const hasExtraFilters = paymentStatus !== 'all' || paymentMethod !== 'all' || customised || search || from || to
+  const clearFilters = () => { setPaymentStatus('all'); setPaymentMethod('all'); setCustomised(false); setSearch(''); setFrom(''); setTo('') }
+
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      await downloadOrdersCsv(filters)
+    } catch (e) {
+      toast.error(e.message)
+    } finally {
+      setExporting(false)
+    }
   }
+
+  const totalRevenue = orders.reduce((s, o) => s + o.total - (o.refundedAmount || 0), 0)
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
-        <p className="text-sm text-gray-400 mt-0.5">{orders.length} orders</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
+          <p className="text-sm text-gray-400 mt-0.5">
+            {orders.length} orders{orders.length > 0 && ` · ${formatCurrency(totalRevenue)} net`}
+          </p>
+        </div>
+        <button
+          onClick={handleExport}
+          disabled={exporting || orders.length === 0}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:border-violet-400 hover:text-violet-600 disabled:opacity-50 transition-colors"
+        >
+          <Download size={15} /> {exporting ? 'Exporting…' : 'Export CSV'}
+        </button>
       </div>
 
       {/* Tabs */}
@@ -47,7 +98,7 @@ export default function OrdersPage() {
         {STATUS_TABS.map((s) => (
           <button
             key={s}
-            onClick={() => { setActiveTab(s); setLoading(true) }}
+            onClick={() => setActiveTab(s)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors ${activeTab === s ? 'bg-white text-violet-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
           >
             {s === 'all' ? 'All Orders' : s}
@@ -55,10 +106,45 @@ export default function OrdersPage() {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by order ID or customer…" className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-violet-400" />
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full sm:w-72">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Order ID, name or email…" className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-violet-400" />
+        </div>
+        <select
+          value={paymentMethod}
+          onChange={(e) => setPaymentMethod(e.target.value)}
+          aria-label="Payment method"
+          className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-violet-400 bg-white"
+        >
+          {METHOD_FILTERS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+        </select>
+        <select
+          value={paymentStatus}
+          onChange={(e) => setPaymentStatus(e.target.value)}
+          className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-violet-400 bg-white"
+        >
+          {PAYMENT_FILTERS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+        </select>
+        <button
+          type="button"
+          onClick={() => setCustomised((c) => !c)}
+          aria-pressed={customised}
+          className={`inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm border transition-colors ${customised ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-gray-200 bg-white text-gray-600 hover:border-violet-400'}`}
+        >
+          <Scissors size={14} /> Custom leather
+        </button>
+        <div className="flex items-center gap-1.5 text-sm text-gray-400">
+          <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} aria-label="From date" className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 outline-none focus:border-violet-400" />
+          <span>to</span>
+          <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} aria-label="To date" className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 outline-none focus:border-violet-400" />
+        </div>
+        {hasExtraFilters && (
+          <button onClick={clearFilters} className="inline-flex items-center gap-1 px-2 py-2 text-xs text-gray-500 hover:text-violet-600">
+            <X size={13} /> Clear filters
+          </button>
+        )}
       </div>
 
       {/* Table */}
@@ -74,7 +160,7 @@ export default function OrdersPage() {
                 <th className="text-left px-5 py-3">Payment</th>
                 <th className="text-left px-5 py-3">Status</th>
                 <th className="text-left px-5 py-3">Date</th>
-                <th className="text-right px-5 py-3">Actions</th>
+                <th className="px-5 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -82,101 +168,52 @@ export default function OrdersPage() {
                 Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i}><td colSpan={8} className="px-5 py-4"><div className="h-4 bg-gray-200 animate-pulse rounded" /></td></tr>
                 ))
-              ) : filtered.map((o) => (
-                <tr key={o.id} className="hover:bg-gray-50 transition-colors">
+              ) : orders.map((o) => (
+                <tr
+                  key={o.id}
+                  onClick={() => navigate(`/admin/orders/${encodeURIComponent(o.id)}`)}
+                  className="hover:bg-gray-50 transition-colors cursor-pointer"
+                >
                   <td className="px-5 py-4 font-mono text-xs text-violet-600 font-semibold">
                     <span className="inline-flex items-center gap-1.5">
                       {o.id}
                       {o.giftWrap && <Gift size={13} className="text-pink-500" aria-label="Gift wrapped" />}
+                      {o.trackingNumber && <Truck size={13} className="text-gray-400" aria-label="Has tracking number" />}
                     </span>
                   </td>
                   <td className="px-5 py-4">
                     <p className="font-medium text-gray-800">{o.customerName}</p>
                     <p className="text-xs text-gray-400">{o.customerEmail}</p>
                   </td>
-                  <td className="px-5 py-4 text-gray-500">{o.items.reduce((s, i) => s + i.quantity, 0)} items</td>
+                  <td className="px-5 py-4 text-gray-500">
+                    {o.items.reduce((s, i) => s + i.quantity, 0)} items
+                    {o.items.some((i) => i.variant?.leather) && (
+                      <span className="block mt-0.5 text-xs text-amber-700" title={o.items.filter((i) => i.variant?.leather).map((i) => `${i.product?.name} → ${i.variant.leather}`).join(', ')}>
+                        Custom leather
+                      </span>
+                    )}
+                  </td>
                   <td className="px-5 py-4 font-semibold text-gray-900">{formatCurrency(o.total)}</td>
-                  <td className="px-5 py-4"><StatusBadge status={o.paymentStatus} /></td>
+                  <td className="px-5 py-4">
+                    <StatusBadge status={o.paymentStatus} />
+                    {o.paymentMethod === 'cod' && (
+                      <span className={`block text-xs mt-0.5 ${!o.codConfirmedAt && o.status !== 'cancelled' ? 'text-amber-700' : 'text-gray-400'}`}>
+                        COD{!o.codConfirmedAt && o.status !== 'cancelled' ? ' · to confirm' : ''}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-5 py-4"><StatusBadge status={o.status} /></td>
                   <td className="px-5 py-4 text-gray-400 text-xs">{formatDate(o.createdAt)}</td>
-                  <td className="px-5 py-4 text-right">
-                    <button onClick={() => setSelected(o)} className="p-1.5 rounded-lg hover:bg-violet-100 text-violet-600 transition-colors">
-                      <Eye size={15} />
-                    </button>
-                  </td>
+                  <td className="px-5 py-4 text-right text-gray-300"><ChevronRight size={16} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {!loading && filtered.length === 0 && (
-            <div className="text-center py-12 text-gray-400">No orders found</div>
+          {!loading && orders.length === 0 && (
+            <div className="text-center py-12 text-gray-400">No orders match these filters</div>
           )}
         </div>
       </div>
-
-      {/* Order detail modal */}
-      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title={`Order ${selected?.id}`} size="lg">
-        {selected && (
-          <div className="space-y-5">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-xs text-gray-400 mb-0.5">Customer</p>
-                <p className="font-medium text-gray-800">{selected.customerName}</p>
-                <p className="text-gray-500">{selected.customerEmail}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-400 mb-0.5">Deliver to</p>
-                <p className="text-gray-700">{selected.address?.line1}</p>
-                <p className="text-gray-500">{selected.address?.city}, {selected.address?.state} - {selected.address?.pincode}</p>
-              </div>
-            </div>
-
-            <div className="border border-gray-100 rounded-xl overflow-hidden">
-              {selected.items.map((item, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 border-b border-gray-50 last:border-0">
-                  <img src={item.product.images[0]} alt="" className="w-12 h-12 rounded-xl object-cover bg-gray-50 shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-800">{item.product.name}</p>
-                    <p className="text-xs text-gray-400">Qty: {item.quantity}</p>
-                  </div>
-                  <span className="text-sm font-semibold">{formatCurrency(item.product.price * item.quantity)}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-between text-sm border-t border-gray-100 pt-3 font-bold text-gray-900">
-              <span>Total</span>
-              <span>{formatCurrency(selected.total)}</span>
-            </div>
-
-            {selected.giftWrap && (
-              <div className="flex items-start gap-2 bg-pink-50 border border-pink-100 rounded-xl p-3 text-sm">
-                <Gift size={16} className="text-pink-500 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-gray-800">Gift wrap requested</p>
-                  {selected.giftNote && <p className="text-gray-500 text-xs mt-0.5">"{selected.giftNote}"</p>}
-                </div>
-              </div>
-            )}
-
-            <div>
-              <p className="text-xs font-medium text-gray-500 mb-2">Update Status</p>
-              <div className="flex flex-wrap gap-2">
-                {['pending', 'processing', 'shipped', 'delivered', 'cancelled'].map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => handleStatusUpdate(selected.id, s)}
-                    disabled={updating || selected.status === s}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors ${selected.status === s ? 'bg-violet-600 text-white' : 'border border-gray-200 text-gray-600 hover:border-violet-400 hover:text-violet-600 disabled:opacity-50'}`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </Modal>
     </div>
   )
 }

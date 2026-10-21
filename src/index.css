@@ -10,6 +10,7 @@
   --color-gold-light:  #E8D5A3;
   --color-muted:       #8B7355;
   --color-border:      #E8DDD4;
+  --color-rust:        #6B2D1B; /* Da Milano-style mahogany: announcement bar, homepage headings */
   --font-serif: 'Cormorant Garamond', Georgia, serif;
   --font-sans:  'Jost', system-ui, sans-serif;
 }
@@ -106,8 +107,40 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-kenburns, .reveal, .route-fade { animation: none !important; transition: none !important; }
+  .hero-kenburns, .reveal, .route-fade, .menu-drop { animation: none !important; transition: none !important; }
   .reveal { opacity: 1; transform: none; }
+}
+
+/* Mega menu — quick fade/drop on open */
+@keyframes menu-drop {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.menu-drop { animation: menu-drop 0.2s ease-out; }
+
+/* Horizontal scrollers (category tiles on phones) without a visible bar */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Homepage section headings — uppercase sans in rust, like the reference site */
+.section-title {
+  font-family: 'Jost', system-ui, sans-serif;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6B2D1B;
+  text-align: center;
+  font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2rem);
+  line-height: 1.15;
+}
+/* Small uppercase label under homepage tiles */
+.tile-label {
+  font-family: 'Jost', system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6B2D1B;
+  text-align: center;
 }
 
 /* Nav underline hover */
@@ -154,4 +187,132 @@
   .panel-brand {
     @apply bg-cream border border-border;
   }
+}
+
+/* ─── Admin theme ───────────────────────────────────────────────────────────
+   The admin pages are written with generic Tailwind palette classes
+   (violet-*, gray-*, green-*, rounded-xl…). Tailwind v4 compiles those to
+   CSS variables, so rather than rewriting hundreds of class names, this scope
+   re-points the variables at the storefront's brown/cream/gold system.
+   Applied by AdminLayout, the admin login page and the invoice page.
+   New admin UI can keep using violet-* for "accent" and gray-* for neutrals. */
+.admin-theme {
+  /* Accent: violet → espresso brown (solid) and gold tints (soft) */
+  --color-violet-50:  #F8F2E7;
+  --color-violet-100: #F1E6CF;
+  --color-violet-200: #E8D5A3;
+  --color-violet-300: #D9BF7A;
+  --color-violet-400: #A8875F;
+  --color-violet-500: #C9A84C;
+  --color-violet-600: #2C1810;
+  --color-violet-700: #5C3D2E;
+  --color-violet-800: #1F110B;
+  --color-violet-900: #140A06;
+
+  /* Neutrals: cool gray → warm cream/brown */
+  --color-gray-50:  #FAF7F4;
+  --color-gray-100: #F0EBE3;
+  --color-gray-200: #E8DDD4;
+  --color-gray-300: #D6C7BA;
+  --color-gray-400: #9E8878;
+  --color-gray-500: #8B6355;
+  --color-gray-600: #6F5044;
+  --color-gray-700: #5C3D2E;
+  --color-gray-800: #3F2A1F;
+  --color-gray-900: #2C1810;
+
+  /* Status colours, muted to sit with the earthy palette */
+  --color-green-50:  #F2F4EC;
+  --color-green-100: #E5EBDB;
+  --color-green-200: #CDD9BE;
+  --color-green-400: #8FA876;
+  --color-green-500: #6B8A52;
+  --color-green-600: #52703C;
+  --color-green-700: #415A2F;
+  --color-red-50:  #FAEFEB;
+  --color-red-100: #F4DDD6;
+  --color-red-200: #E8C0B4;
+  --color-red-400: #C2705E;
+  --color-red-500: #A8503D;
+  --color-red-600: #94402F;
+  --color-red-700: #7A3326;
+  --color-red-900: #4A1F17;
+  --color-yellow-100: #F6EBCB;
+  --color-yellow-200: #EBD9A5;
+  --color-yellow-300: #E8D5A3;
+  --color-yellow-700: #85651C;
+  --color-amber-50:  #FBF5E8;
+  --color-amber-100: #F4E6C6;
+  --color-amber-600: #95701F;
+  --color-amber-700: #7A5B19;
+  --color-orange-50:  #FBF1E8;
+  --color-orange-100: #F4E0CC;
+  --color-orange-200: #E9C8A8;
+  --color-orange-500: #B8743F;
+  --color-orange-600: #9C5F2F;
+  --color-orange-700: #7F4C25;
+  --color-blue-100: #E2E7EA;
+  --color-blue-200: #C8D2D9;
+  --color-blue-600: #4A6274;
+  --color-blue-700: #3B5060;
+  --color-pink-50:  #FAF0EC;
+  --color-pink-100: #F1DCD5;
+  --color-pink-500: #A85F55;
+
+  /* Square-ish corners like the storefront (rounded-full is left alone) */
+  --radius-lg:  2px;
+  --radius-xl:  2px;
+  --radius-2xl: 3px;
+  --radius-3xl: 4px;
+
+  /* Jost is only loaded at 300/400/500 — map heavier weights down instead of
+     letting the browser fake-bold them */
+  --font-weight-medium:   400;
+  --font-weight-semibold: 500;
+  --font-weight-bold:     500;
+  --font-weight-extrabold: 500;
+  --font-weight-black:    500;
+
+  font-family: var(--font-sans);
+  font-weight: 300;
+  color: var(--color-brown);
+}
+
+/* Headings use the storefront's Cormorant serif. Unlayered on purpose so the
+   sizes win over the small sans-sized utilities on existing admin headings. */
+.admin-theme h1 {
+  font-family: var(--font-serif);
+  font-size: 2.125rem;
+  line-height: 1.15;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.admin-theme :is(h2, h3) {
+  font-family: var(--font-serif);
+  font-size: 1.3rem;
+  line-height: 1.3;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* Table headers → the storefront's small tracked uppercase labels */
+.admin-theme thead th {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  font-weight: 400;
+}
+
+/* IDs, AWBs, GSTINs: tracked Jost with even digits instead of a code font */
+.admin-theme .font-mono {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Read-only forms (e.g. Settings for Support staff) — make it obvious fields can't be edited */
+.admin-theme fieldset:disabled :is(input, select, textarea) {
+  background-color: var(--color-gray-50);
+  color: var(--color-gray-600);
+  cursor: not-allowed;
 }
