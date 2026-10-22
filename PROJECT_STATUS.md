@@ -112,7 +112,7 @@ FoldX/
 ├── backend/
 │   ├── prisma/
 │   │   ├── schema.prisma
-│   │   ├── migrations/           # 14 migrations
+│   │   ├── migrations/           # 2 MySQL migrations
 │   │   ├── seed.js, seedData.js  # seeding (idempotent "ensure*" helpers)
 │   │   ├── defaultPages.js       # About/FAQ starter pages
 │   │   └── policyPages.js        # Shipping/Returns/Privacy/Terms texts
@@ -213,9 +213,9 @@ Read these before changing checkout, stock or money code.
 | Content | `Banner`, `SiteContent` (menu/announcements/homepage sections/gift store/footer JSON), `Page`, `Collection`, `NewsletterSubscriber` |
 | Admin | `Settings` (single row, id 1), `AuditLog`, `StaffLogin` |
 
-**Migrations** (in order): `init` → `add_user_isactive` → `add_gift_wrap` → `add_staff_roles_and_audit_log` → `order_management` → `stock_and_gst` → `site_content` → `variants_content_support` → `coupons` → `customers_and_cod` → `finance_2fa_carts` → `collections_newsletter` → `free_customisation` → `custom_leathers_text` (the second fixes a JSON default SQLite can't store — leathers are a comma-separated string).
+**Migrations** (MySQL on AWS RDS, every table prefixed `foldx_`): `init_mysql` (baseline of everything up to 15 Oct) → `collections_customisation_gst` (Collection, NewsletterSubscriber, `Product.collectionId`/`allowCustomisation`, Settings customisation fields + `tradeName`/`businessType`). The RDS database is shared with other projects — apply with `prisma migrate deploy` only, never `migrate reset` or `db push`.
 
-Moving to Postgres: change `provider` in `schema.prisma` and `DATABASE_URL`, then create a fresh migration baseline. Some code relies on SQLite's case-insensitive `LIKE` for `contains` and then re-checks exact matches in JS — that still works on Postgres but could use `mode: 'insensitive'` there.
+Some code relies on a case-insensitive `LIKE` for `contains` (true for MySQL's `utf8mb4_unicode_ci`) and then re-checks exact matches in JS.
 
 ---
 

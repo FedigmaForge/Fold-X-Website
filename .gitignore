@@ -1,31 +1,54 @@
-# Logs
-logs
+# ─── Secrets / environment ───────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ─── Dependencies ────────────────────────────────────────
+node_modules/
+
+# ─── Build output ────────────────────────────────────────
+dist/
+dist-ssr/
+build/
+coverage/
+*.local
+
+# ─── Logs ────────────────────────────────────────────────
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+dev-log.txt
 
-node_modules
-dist
-dist-ssr
-*.local
-.env
-backend/node_modules
-backend/.env
-backend/prisma/dev.db
-backend/prisma/dev.db-journal
+# ─── Database (local SQLite) ─────────────────────────────
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# ─── User uploads (keep folder, ignore contents) ─────────
 backend/uploads/*
 !backend/uploads/.gitkeep
 
-# Editor directories and files
+# ─── AI assistant / tooling ──────────────────────────────
+.claude/
+CLAUDE.md
+.cursor/
+
+# ─── Editor / OS ─────────────────────────────────────────
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+.DS_Store
+Thumbs.db
+desktop.ini
